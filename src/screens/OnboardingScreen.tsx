@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, setDoc, getDoc } from 'firebase/firestore'; // [UPDATED] Added getDoc
 import { auth, db } from '../services/firebaseConfig';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
+import { calculateDailyNutritionGoals, calculateBMI } from '../services/nutritionCalculator';
 
 export default function OnboardingScreen({ navigation }: any) {
   const [step, setStep] = useState(1); // 1: Age, 2: Height, 3: Weight, 4: Diseases
@@ -80,20 +81,53 @@ export default function OnboardingScreen({ navigation }: any) {
       const user = auth.currentUser;
       if (!user) return;
 
+      // Parse user inputs
+      const weightKg = parseFloat(weight);
+      const heightCm = parseFloat(height);
+      const ageYears = parseInt(age);
+      
       // Calculate BMI
-      const h_m = parseFloat(height) / 100;
-      const bmi = parseFloat((parseFloat(weight) / (h_m * h_m)).toFixed(1));
+      const bmi = calculateBMI(weightKg, heightCm);
+
+      // Check if user has hypertension for sodium limit adjustment
+      const hasHypertension = diseases.includes("Hypertension");
+
+      // Calculate daily nutrition goals based on maintenance calories
+      const nutritionGoals = calculateDailyNutritionGoals(
+        weightKg,
+        heightCm,
+        ageYears,
+        "male", // Default to male; can add gender selection later
+        hasHypertension
+      );
 
       // Create the User Profile Document
       await setDoc(doc(db, "user_profiles", user.uid), {
         // USE THE AUTH DISPLAY NAME WE SAVED IN SIGNUP
         name: user.displayName || user.email?.split('@')[0] || "User", 
         email: user.email,
-        age: parseInt(age),
-        height: parseFloat(height),
-        weight: parseFloat(weight),
+        age: ageYears,
+        height: heightCm,
+        weight: weightKg,
         diseases: diseases.length > 0 ? diseases : ["None"],
         bmi: bmi,
+        // NEW: Save calculated daily goals and macro limits
+        dailyNutritionGoals: {
+          calories: nutritionGoals.calories,
+          protein: nutritionGoals.protein,
+          carbs: nutritionGoals.carbs,
+          fat: nutritionGoals.fat,
+          sugar: nutritionGoals.sugar,
+          sodium: nutritionGoals.sodium,
+        },
+        customLimits: {
+          calories: nutritionGoals.calories,
+          protein: nutritionGoals.protein,
+          carbs: nutritionGoals.carbs,
+          fat: nutritionGoals.fat,
+          sugar: nutritionGoals.sugar,
+          sodium: nutritionGoals.sodium,
+        },
         createdAt: new Date()
       });
 

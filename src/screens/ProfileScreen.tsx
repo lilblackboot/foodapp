@@ -5,6 +5,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseConfig';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { calculateDailyNutritionGoals, calculateBMI } from '../services/nutritionCalculator';
 
 export default function ProfileScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
@@ -17,6 +18,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [diseases, setDiseases] = useState<string[]>([]);
+  const [bmi, setBmi] = useState(0);
   
   const diseaseOptions = ["Diabetes", "Hypertension", "Celiac", "None"];
 
@@ -45,14 +47,17 @@ export default function ProfileScreen({ navigation }: any) {
       
       if (snap.exists()) {
         const data = snap.data();
+        console.log("✅ Profile data loaded:", data);
+        
         setName(data.name);
         setAge(data.age.toString());
         setWeight(data.weight.toString());
         setHeight(data.height.toString());
         setDiseases(data.diseases || ["None"]);
+        setBmi(data.bmi || 0);
       }
     } catch (e) {
-      console.error(e);
+      console.error("❌ Error fetching profile:", e);
     } finally {
       setLoading(false);
     }
@@ -80,19 +85,52 @@ export default function ProfileScreen({ navigation }: any) {
       const user = auth.currentUser;
       if (!user) return;
 
-      const h_m = parseFloat(height) / 100;
-      const bmi = parseFloat((parseFloat(weight) / (h_m * h_m)).toFixed(1));
+      const weightKg = parseFloat(weight);
+      const heightCm = parseFloat(height);
+      const ageYears = parseInt(age);
+
+      // Calculate BMI
+      const bmi = calculateBMI(weightKg, heightCm);
+
+      // Check if user has hypertension for sodium limit adjustment
+      const hasHypertension = diseases.includes("Hypertension");
+
+      // Recalculate daily nutrition goals based on updated stats
+      const nutritionGoals = calculateDailyNutritionGoals(
+        weightKg,
+        heightCm,
+        ageYears,
+        "male", // Default to male; can add gender selection later
+        hasHypertension
+      );
 
       await updateDoc(doc(db, "user_profiles", user.uid), {
-        age: parseInt(age),
-        weight: parseFloat(weight),
-        height: parseFloat(height),
+        age: ageYears,
+        weight: weightKg,
+        height: heightCm,
         diseases,
-        bmi
+        bmi,
+        // Update calculated daily goals and macro limits
+        dailyNutritionGoals: {
+          calories: nutritionGoals.calories,
+          protein: nutritionGoals.protein,
+          carbs: nutritionGoals.carbs,
+          fat: nutritionGoals.fat,
+          sugar: nutritionGoals.sugar,
+          sodium: nutritionGoals.sodium,
+        },
+        customLimits: {
+          calories: nutritionGoals.calories,
+          protein: nutritionGoals.protein,
+          carbs: nutritionGoals.carbs,
+          fat: nutritionGoals.fat,
+          sugar: nutritionGoals.sugar,
+          sodium: nutritionGoals.sodium,
+        }
       });
       
       setIsEditing(false);
-      Alert.alert("Success", "Profile updated!");
+      Alert.alert("Success", `Profile updated!\n\nDaily Goals:\n• Calories: ${nutritionGoals.calories}\n• Protein: ${nutritionGoals.protein}g\n• Carbs: ${nutritionGoals.carbs}g\n• Fat: ${nutritionGoals.fat}g`);
     } catch (e) {
       Alert.alert("Error", "Could not save profile.");
     } finally {
@@ -156,6 +194,8 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
           </View>
         </View>
+
+        {/* Daily Nutrition Goals - REMOVED, now in HomeScreen */}
 
         {/* Diseases Section */}
         <View style={styles.section}>

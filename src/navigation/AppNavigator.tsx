@@ -18,6 +18,7 @@ import ScanScreen from '../screens/ScanScreen';
 import ScanResultScreen from '../screens/ScanResultScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
+import RecipeCalculatorScreen from '../screens/RecipeCalculatorScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -43,6 +44,7 @@ function ScanStackNavigator() {
     <ScanStack.Navigator screenOptions={{ headerShown: false }}>
       <ScanStack.Screen name="ScanCamera" component={ScanScreen} />
       <ScanStack.Screen name="ScanResult" component={ScanResultScreen} />
+      <ScanStack.Screen name="RecipeCalculator" component={RecipeCalculatorScreen} />
     </ScanStack.Navigator>
   );
 }

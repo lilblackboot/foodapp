@@ -12,10 +12,11 @@ import { logFoodItem } from '../services/firebaseHelper';
 import { FoodItem } from '../types';
 
 export default function ScanResultScreen({ route, navigation }: any) {
-  const { barcode } = route.params;
+  const { barcode, fromRecipe, recipeName, recipeNutrition, recipeBreakdown } = route.params || {};
   
   // Steps: 'loading' -> 'input' (ask grams) -> 'result' (show analysis)
-  const [step, setStep] = useState<'loading' | 'input' | 'result'>('loading');
+  // For recipes, skip input and go straight to result
+  const [step, setStep] = useState<'loading' | 'input' | 'result'>(fromRecipe ? 'result' : 'loading');
   
   // Data State
   const [baseFood, setBaseFood] = useState<any>(null); // The raw 100g data
@@ -27,60 +28,167 @@ export default function ScanResultScreen({ route, navigation }: any) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
-    fetchBaseData();
+    if (fromRecipe && recipeNutrition) {
+      // For recipes, set up the food data directly from recipe nutrition
+      const recipeFood = {
+        name: recipeName || 'Homemade Recipe',
+        brand: 'Custom Recipe',
+        calories: recipeNutrition.calories || 0,
+        protein: recipeNutrition.protein || 0,
+        carbs: recipeNutrition.carbs || 0,
+        fat: recipeNutrition.fat || 0,
+        sugar: recipeNutrition.sugar || 0,
+        sodium: recipeNutrition.sodium || 0,
+        ingredients: recipeBreakdown?.map((ing: any) => ing.name).join(', ') || 'Mixed ingredients',
+        servingSize: '1 serving'
+      };
+      
+      setBaseFood(recipeFood);
+      setFood(recipeFood);
+      setPortionSize('1');
+      
+      // Skip to result with default "SAFE" decision for recipes
+      setResult({
+        decision: 'SAFE',
+        reason: 'Custom recipe from your ingredients',
+        sugarOK: true,
+        sodiumOK: true,
+        caloriesOK: true
+      });
+    } else if (barcode) {
+      // For barcode scans, fetch data
+      fetchBaseData();
+    } else {
+      Alert.alert("Error", "Invalid barcode or recipe data");
+      navigation.goBack();
+    }
   }, []);
-
-  // 1. FETCH RAW DATA
+  
+  // 1. FETCH RAW DATA (3-Layer Lookup: Firebase → OpenFoodFacts → Manual)
   const fetchBaseData = async () => {
     try {
-      const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-      const apiData = await response.json();
-      let foundData = null;
-
-      if (apiData.status === 1) {
-        const product = apiData.product;
-        foundData = {
-          name: product.product_name || "Unknown Food",
-          brand: product.brands || "Generic",
-          calories: product.nutriments?.['energy-kcal_100g'] || 0,
-          sugar: product.nutriments?.sugars_100g || 0,
-          sodium: (product.nutriments?.salt_100g || 0) * 400, 
-          fat: product.nutriments?.fat_100g || 0,
-          carbs: product.nutriments?.carbohydrates_100g || 0,
-          protein: product.nutriments?.proteins_100g || 0,
-          ingredients: product.ingredients_text || "Ingredients not listed",
-          image: product.image_url,
-          servingSize: product.serving_size || "100g" 
-        };
-        if (product.serving_quantity) {
-            setPortionSize(product.serving_quantity.toString());
-        }
-      } else {
-        const customDoc = await getDoc(doc(db, "custom_products", barcode));
-        if (customDoc.exists()) {
-          foundData = customDoc.data();
-          if (!foundData.image) foundData.image = null; 
-        }
-      }
-
-      if (!foundData) {
-        Alert.alert("Product Not Found", "We don't have this item yet.", [{ text: "OK", onPress: () => navigation.goBack() }]);
+      if (!barcode) {
+        Alert.alert("Error", "Invalid barcode");
+        navigation.goBack();
         return;
       }
 
-      setBaseFood(foundData);
-      setStep('input');
+      let foundData = null;
+
+      // LAYER 1: Check Firebase custom_products first (fastest, most reliable)
+      try {
+        const customDoc = await getDoc(doc(db, "custom_products", barcode));
+        if (customDoc.exists()) {
+          const data = customDoc.data();
+          if (data) {
+            foundData = data;
+            if (!foundData.image) foundData.image = null;
+            setBaseFood(foundData);
+            setStep('input');
+            return;
+          }
+        }
+      } catch (fbError) {
+        console.warn("Firebase lookup failed:", fbError);
+      }
+
+      // LAYER 2: Try OpenFoodFacts API
+      try {
+        const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`, {
+          timeout: 10000
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status}`);
+        }
+
+        const apiData = await response.json();
+
+        if (apiData && apiData.status === 1 && apiData.product) {
+          const product = apiData.product;
+          
+          // Safely extract nutrition data
+          const nutriments = product.nutriments || {};
+          
+          // Validate that product has minimum nutrition data
+          const hasNutritionData = 
+            nutriments['energy-kcal_100g'] !== undefined ||
+            nutriments.sugars_100g !== undefined ||
+            nutriments.salt_100g !== undefined ||
+            nutriments.fat_100g !== undefined;
+
+          if (hasNutritionData) {
+            foundData = {
+              name: product.product_name ? String(product.product_name).trim() : "Unknown Food",
+              brand: product.brands ? String(product.brands).trim() : "Generic",
+              calories: Number(nutriments['energy-kcal_100g']) || 0,
+              sugar: Number(nutriments.sugars_100g) || 0,
+              sodium: (Number(nutriments.salt_100g) || 0) * 400,
+              fat: Number(nutriments.fat_100g) || 0,
+              carbs: Number(nutriments.carbohydrates_100g) || 0,
+              protein: Number(nutriments.proteins_100g) || 0,
+              ingredients: product.ingredients_text ? String(product.ingredients_text).trim() : "Ingredients not listed",
+              image: product.image_url || null,
+              servingSize: product.serving_size ? String(product.serving_size).trim() : "100g"
+            };
+
+            if (product.serving_quantity) {
+              setPortionSize(String(Math.round(Number(product.serving_quantity))));
+            }
+
+            setBaseFood(foundData);
+            setStep('input');
+            return;
+          }
+        }
+      } catch (apiError) {
+        console.warn("OpenFoodFacts API error:", apiError);
+      }
+
+      // LAYER 3: Product not found - offer options
+      showProductNotFoundOptions();
+
     } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Network error.");
+      console.error("❌ Unexpected error in fetchBaseData:", error);
+      Alert.alert("Error", "An unexpected error occurred.");
       navigation.goBack();
     }
   };
 
+  // Handle product not found with user options
+  const showProductNotFoundOptions = () => {
+    Alert.alert(
+      "Product Not Found",
+      "We couldn't find this barcode in our database. You can:",
+      [
+        {
+          text: "Add Manually",
+          onPress: () => {
+            Alert.alert("Coming Soon", "Manual product entry will be available soon.");
+            navigation.goBack();
+          }
+        },
+        {
+          text: "Try Again",
+          onPress: () => fetchBaseData()
+        },
+        {
+          text: "Cancel",
+          onPress: () => navigation.goBack()
+        }
+      ]
+    );
+  };
+
   // 2. CALCULATE & ANALYZE
   const handleAnalyze = async () => {
+    if (!baseFood) {
+      Alert.alert("Error", "Food data not loaded");
+      return;
+    }
+
     const grams = parseFloat(portionSize);
-    if (!grams || grams <= 0) {
+    if (!grams || isNaN(grams) || grams <= 0) {
       Alert.alert("Invalid Amount", "Please enter a valid weight in grams.");
       return;
     }
@@ -94,19 +202,19 @@ export default function ScanResultScreen({ route, navigation }: any) {
       const ratio = grams / 100;
       const calculatedFood = {
         ...baseFood,
-        calories: baseFood.calories * ratio,
-        sugar: baseFood.sugar * ratio,
-        sodium: baseFood.sodium * ratio,
-        fat: baseFood.fat * ratio,
-        carbs: baseFood.carbs * ratio,
-        protein: baseFood.protein * ratio,
+        calories: (baseFood.calories || 0) * ratio,
+        sugar: (baseFood.sugar || 0) * ratio,
+        sodium: (baseFood.sodium || 0) * ratio,
+        fat: (baseFood.fat || 0) * ratio,
+        carbs: (baseFood.carbs || 0) * ratio,
+        protein: (baseFood.protein || 0) * ratio,
         portionLogged: grams 
       };
 
       setFood(calculatedFood);
 
       const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
-      const profileData = profileSnap.data();
+      const profileData = profileSnap.exists() ? profileSnap.data() : {};
       const today = new Date().toISOString().split('T')[0];
       const intakeSnap = await getDoc(doc(db, "daily_intake", `${user.uid}_${today}`));
       const intakeData = intakeSnap.exists() ? intakeSnap.data() : {};
@@ -115,19 +223,24 @@ export default function ScanResultScreen({ route, navigation }: any) {
       setResult(decisionResult);
       setStep('result');
 
-      const aiResponse = await getFoodAnalysis(
-        calculatedFood.name,
-        {
-           sugar: calculatedFood.sugar, 
-           sodium: calculatedFood.sodium, 
-           fat: calculatedFood.fat,
-           calories: calculatedFood.calories
-        }, 
-        calculatedFood.ingredients, 
-        profileData, 
-        decisionResult.decision 
-      );
-      setAiExplanation(aiResponse);
+      try {
+        const aiResponse = await getFoodAnalysis(
+          String(calculatedFood.name || "Unknown"),
+          {
+             sugar: Number(calculatedFood.sugar) || 0, 
+             sodium: Number(calculatedFood.sodium) || 0, 
+             fat: Number(calculatedFood.fat) || 0,
+             calories: Number(calculatedFood.calories) || 0
+          }, 
+          calculatedFood.ingredients || [], 
+          profileData || {}, 
+          decisionResult?.decision || "UNKNOWN" 
+        );
+        setAiExplanation(aiResponse || "Analysis complete");
+      } catch (aiError) {
+        console.warn("⚠️ AI Analysis error:", aiError);
+        setAiExplanation("Analysis not available");
+      }
 
     } catch (e) {
       console.error(e);
@@ -174,12 +287,20 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
   // INPUT SCREEN
   if (step === 'input') {
+    if (!baseFood) {
+      return (
+        <View style={styles.center}>
+          <Text style={styles.error}>Error loading food data</Text>
+        </View>
+      );
+    }
+    
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.inputContainer}>
           <Text style={styles.title}>How much?</Text>
-          <Text style={styles.subtitle}>{baseFood.name}</Text>
-          <Text style={styles.brand}>{baseFood.brand}</Text>
+          <Text style={styles.subtitle}>{baseFood.name || "Unknown"}</Text>
+          <Text style={styles.brand}>{baseFood.brand || "Generic"}</Text>
 
           <View style={styles.inputBox}>
             <TextInput 
@@ -203,8 +324,16 @@ export default function ScanResultScreen({ route, navigation }: any) {
   }
 
   // RESULT SCREEN
-  const statusColor = result?.decision === "SAFE" ? COLORS.success : 
-                      result?.decision === "WARNING" ? COLORS.warning : COLORS.danger;
+  if (!food || !result) {
+    return (
+      <View style={styles.center}>
+        <Text>Error: Food data missing</Text>
+      </View>
+    );
+  }
+
+  const statusColor = result.decision === "SAFE" ? COLORS.success : 
+                      result.decision === "WARNING" ? COLORS.warning : COLORS.danger;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -212,8 +341,8 @@ export default function ScanResultScreen({ route, navigation }: any) {
         
         {/* HEADER CARD WITH MACROS GRID */}
         <View style={styles.card}>
-          <Text style={styles.brand}>{food.brand}</Text>
-          <Text style={styles.foodName}>{food.name}</Text>
+          <Text style={styles.brand}>{food?.brand || "Generic"}</Text>
+          <Text style={styles.foodName}>{food?.name || "Unknown Food"}</Text>
           <Text style={{color:COLORS.textSecondary, marginBottom:16}}>
              Portion: {portionSize}g
           </Text>
@@ -221,23 +350,23 @@ export default function ScanResultScreen({ route, navigation }: any) {
           {/* MACRO GRID */}
           <View style={styles.macroGrid}>
             <View style={styles.macroItem}>
-              <Text style={styles.macroValue}>{Math.round(food.calories)}</Text>
+              <Text style={styles.macroValue}>{Math.round(food?.calories || 0)}</Text>
               <Text style={styles.macroLabel}>Calories</Text>
             </View>
             <View style={styles.macroItem}>
-              <Text style={styles.macroValue}>{Math.round(food.sodium)}mg</Text>
+              <Text style={styles.macroValue}>{Math.round(food?.sodium || 0)}mg</Text>
               <Text style={styles.macroLabel}>Sodium</Text>
             </View>
             <View style={styles.macroItem}>
-              <Text style={styles.macroValue}>{Math.round(food.protein)}g</Text>
+              <Text style={styles.macroValue}>{Math.round(food?.protein || 0)}g</Text>
               <Text style={styles.macroLabel}>Protein</Text>
             </View>
             <View style={styles.macroItem}>
-              <Text style={styles.macroValue}>{Math.round(food.carbs)}g</Text>
+              <Text style={styles.macroValue}>{Math.round(food?.carbs || 0)}g</Text>
               <Text style={styles.macroLabel}>Carbs</Text>
             </View>
             <View style={styles.macroItem}>
-              <Text style={styles.macroValue}>{Math.round(food.fat)}g</Text>
+              <Text style={styles.macroValue}>{Math.round(food?.fat || 0)}g</Text>
               <Text style={styles.macroLabel}>Fat</Text>
             </View>
           </View>
@@ -246,15 +375,15 @@ export default function ScanResultScreen({ route, navigation }: any) {
         {/* DECISION BOX */}
         <View style={[styles.resultBox, { borderColor: statusColor }]}>
           <Text style={[styles.decisionText, { color: statusColor }]}>
-            {result?.decision}
+            {result.decision || "UNKNOWN"}
           </Text>
           
           <View style={styles.aiBox}>
             <Text style={styles.aiLabel}>✨ Smart Analysis</Text>
             <Text style={styles.aiText}>
-              {aiExplanation !== "Generating health insights..." 
+              {(aiExplanation && aiExplanation !== "Generating health insights..." 
                 ? aiExplanation 
-                : (result?.reason || "Analyzing...") + "\n\n" + aiExplanation}
+                : (result.reason || "Analyzing...") + "\n\n" + aiExplanation) || "Analysis not available"}
             </Text>
           </View>
         </View>

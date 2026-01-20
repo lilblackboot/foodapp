@@ -7,18 +7,22 @@ import { useFocusEffect } from '@react-navigation/native';
 import { auth, db } from '../services/firebaseConfig';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import FoodList from '../components/FoodList'; 
+import { calculateDailyNutritionGoals, calculateBMI } from '../services/nutritionCalculator';
 
-// Standard Daily Goals
-const GOALS = {
-  calories: 2200,
+// Fallback Daily Goals (used if user profile doesn't have personalized goals)
+const DEFAULT_GOALS = {
+  calories: 2000,
   protein: 60,
-  carbs: 275,
-  fat: 70
+  carbs: 250,
+  fat: 70,
+  sugar: 30,
+  sodium: 2300
 };
 
 export default function HomeScreen({ navigation }: any) {
   const [user, setUser] = useState<any>(null);
-  const [intake, setIntake] = useState<any>({ calories: 0, protein: 0, carbs: 0, fat: 0 });
+  const [goals, setGoals] = useState<any>(DEFAULT_GOALS);
+  const [intake, setIntake] = useState<any>({ calories: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, sodium: 0 });
   const [refreshing, setRefreshing] = useState(false);
   
   // New state to trigger re-renders when food is modified
@@ -32,29 +36,64 @@ export default function HomeScreen({ navigation }: any) {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
-    // 1. Get User Name
-    const userDoc = await getDoc(doc(db, "user_profiles", currentUser.uid));
-    if (userDoc.exists()) {
-      setUser(userDoc.data());
-    }
+    try {
+      // 1. Get User Profile and Nutrition Goals
+      const userDoc = await getDoc(doc(db, "user_profiles", currentUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setUser(userData);
+        
+        // Try to get personalized nutrition goals
+        let userGoals = userData.dailyNutritionGoals;
+        
+        // Fallback: if goals don't exist, calculate them
+        if (!userGoals) {
+          console.log("📊 Calculating personalized goals for user...");
+          const hasHypertension = (userData.diseases || []).includes("Hypertension");
+          userGoals = calculateDailyNutritionGoals(
+            userData.weight,
+            userData.height,
+            userData.age,
+            "male",
+            hasHypertension
+          );
+        }
+        
+        setGoals({
+          calories: userGoals.calories,
+          protein: userGoals.protein,
+          carbs: userGoals.carbs,
+          fat: userGoals.fat,
+          sugar: userGoals.sugar,
+          sodium: userGoals.sodium
+        });
+        
+        console.log("✅ User goals loaded:", userGoals);
+      }
 
-    // 2. Get Today's Intake 
-    const today = getTodayDate();
-    const intakeRef = doc(db, 'users', currentUser.uid, 'daily_summaries', today);
-    const intakeSnap = await getDoc(intakeRef);
+      // 2. Get Today's Intake 
+      const today = getTodayDate();
+      const intakeRef = doc(db, 'users', currentUser.uid, 'daily_summaries', today);
+      const intakeSnap = await getDoc(intakeRef);
 
-    if (intakeSnap.exists()) {
-      const data = intakeSnap.data();
-      setIntake({
-        calories: data.totalCalories || 0,
-        protein: data.totalProtein || 0,
-        carbs: data.totalCarbs || 0,
-        fat: data.totalFat || 0
-      });
-    } else {
-      setIntake({ calories: 0, protein: 0, carbs: 0, fat: 0 });
+      if (intakeSnap.exists()) {
+        const data = intakeSnap.data();
+        setIntake({
+          calories: data.totalCalories || 0,
+          protein: data.totalProtein || 0,
+          carbs: data.totalCarbs || 0,
+          fat: data.totalFat || 0,
+          sugar: data.totalSugar || 0,
+          sodium: data.totalSodium || 0
+        });
+      } else {
+        setIntake({ calories: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, sodium: 0 });
+      }
+    } catch (error) {
+      console.error("❌ Error fetching home data:", error);
+    } finally {
+      setRefreshing(false);
     }
-    setRefreshing(false);
   };
 
   // Callback passed to FoodList: runs when you delete/edit food
@@ -114,10 +153,10 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.calorieCard}>
           <Text style={styles.calLabel}>Calories Consumed</Text>
           <Text style={styles.calValue}>{Math.round(intake.calories)}</Text>
-          <Text style={styles.calGoal}>of {GOALS.calories} kcal goal</Text>
+          <Text style={styles.calGoal}>of {goals.calories} kcal goal</Text>
           
           <View style={styles.mainProgressBg}>
-             <View style={[styles.mainProgressFill, { width: `${Math.min(intake.calories / GOALS.calories, 1) * 100}%` }]} />
+             <View style={[styles.mainProgressFill, { width: `${Math.min(intake.calories / goals.calories, 1) * 100}%` }]} />
           </View>
         </View>
 
@@ -125,9 +164,11 @@ export default function HomeScreen({ navigation }: any) {
         <Text style={styles.sectionTitle}>Daily Macros</Text>
         
         <View style={styles.statsGrid}>
-          <MacroBar label="Protein" value={intake.protein || 0} max={GOALS.protein} color="#4ECDC4" />
-          <MacroBar label="Carbs" value={intake.carbs || 0} max={GOALS.carbs} color="#FFD166" />
-          <MacroBar label="Fats" value={intake.fat || 0} max={GOALS.fat} color="#EF476F" />
+          <MacroBar label="Protein" value={intake.protein || 0} max={goals.protein} color="#4ECDC4" />
+          <MacroBar label="Carbs" value={intake.carbs || 0} max={goals.carbs} color="#FFD166" />
+          <MacroBar label="Fats" value={intake.fat || 0} max={goals.fat} color="#EF476F" />
+          <MacroBar label="Sugar Max" value={intake.sugar || 0} max={goals.sugar} color="#FF6B9D" />
+          <MacroBar label="Sodium Max" value={intake.sodium || 0} max={goals.sodium} color="#A8DADC" />
         </View>
 
         {/* Food List Component */}
