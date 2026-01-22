@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, ScrollView, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseConfig';
@@ -26,6 +26,10 @@ export default function ScanResultScreen({ route, navigation }: any) {
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [aiExplanation, setAiExplanation] = useState<string>("Generating health insights...");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Edit name state
+  const [editNameModalVisible, setEditNameModalVisible] = useState(false);
+  const [editedName, setEditedName] = useState('');
 
   useEffect(() => {
     if (fromRecipe && recipeNutrition) {
@@ -46,6 +50,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
       setBaseFood(recipeFood);
       setFood(recipeFood);
       setPortionSize('1');
+      setEditedName(recipeFood.name);
       
       // Skip to result with default "SAFE" decision for recipes
       setResult({
@@ -250,6 +255,15 @@ export default function ScanResultScreen({ route, navigation }: any) {
     }
   };
 
+  // 2.5 EDIT NAME
+  const handleSaveName = () => {
+    if (editedName.trim()) {
+      setFood({ ...food, name: editedName.trim() });
+      setBaseFood({ ...baseFood, name: editedName.trim() });
+      setEditNameModalVisible(false);
+    }
+  };
+
   // 3. LOG FOOD (UPDATED TO USE HELPER)
   const logFood = async () => {
     try {
@@ -257,11 +271,13 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
       // Prepare the item strictly typed
       const itemToLog: FoodItem = {
-        name: food.name,
+        name: editedName.trim() || food.name,
         calories: food.calories,
         protein: food.protein,
         carbs: food.carbs,
         fat: food.fat,
+        sugar: food.sugar || 0,
+        sodium: food.sodium || 0,
         serving_size: portionSize, // Storing what user typed (e.g. "150")
       };
       
@@ -342,7 +358,18 @@ export default function ScanResultScreen({ route, navigation }: any) {
         {/* HEADER CARD WITH MACROS GRID */}
         <View style={styles.card}>
           <Text style={styles.brand}>{food?.brand || "Generic"}</Text>
-          <Text style={styles.foodName}>{food?.name || "Unknown Food"}</Text>
+          <View style={styles.foodNameRow}>
+            <Text style={styles.foodName}>{food?.name || "Unknown Food"}</Text>
+            <TouchableOpacity 
+              style={styles.editNameBtn}
+              onPress={() => {
+                setEditedName(food.name);
+                setEditNameModalVisible(true);
+              }}
+            >
+              <Text style={{fontSize: 16, color: COLORS.primary}}>✏️</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={{color:COLORS.textSecondary, marginBottom:16}}>
              Portion: {portionSize}g
           </Text>
@@ -399,6 +426,33 @@ export default function ScanResultScreen({ route, navigation }: any) {
           <Text style={{color: COLORS.textSecondary}}>Cancel</Text>
         </TouchableOpacity>
       </View>
+
+      {/* EDIT NAME MODAL */}
+      <Modal visible={editNameModalVisible} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Recipe Name</Text>
+            
+            <TextInput 
+              style={styles.modalInput} 
+              value={editedName} 
+              onChangeText={setEditedName}
+              placeholder="Enter recipe name"
+              placeholderTextColor={COLORS.textSecondary}
+              autoFocus
+            />
+
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditNameModalVisible(false)}>
+                <Text style={styles.cancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveName}>
+                <Text style={styles.saveTxt}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -445,4 +499,16 @@ const styles = StyleSheet.create({
   button: { padding: SPACING.l, borderRadius: 16, alignItems: 'center' },
   btnText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
   cancelBtn: { alignItems: 'center', padding: SPACING.m },
+  
+  // Edit Name Modal Styles
+  foodNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  editNameBtn: { padding: 8, marginLeft: 8 },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  modalCard: { backgroundColor: COLORS.surface, borderRadius: 16, padding: SPACING.l, width: '80%', borderWidth: 1, borderColor: '#333' },
+  modalTitle: { color: COLORS.textPrimary, fontSize: 18, fontWeight: 'bold', marginBottom: SPACING.m },
+  modalInput: { backgroundColor: '#1A1A1A', borderRadius: 8, padding: SPACING.m, color: COLORS.textPrimary, marginBottom: SPACING.l, borderWidth: 1, borderColor: COLORS.primary },
+  modalBtns: { flexDirection: 'row', gap: SPACING.m, justifyContent: 'flex-end' },
+  saveBtn: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.l, paddingVertical: SPACING.s, borderRadius: 8 },
+  saveTxt: { color: '#000', fontWeight: 'bold' },
+  cancelTxt: { color: COLORS.textSecondary },
 });

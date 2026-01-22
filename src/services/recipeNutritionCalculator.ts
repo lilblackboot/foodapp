@@ -6,7 +6,8 @@
 
 export interface Ingredient {
   name: string;
-  amount: number; // in grams
+  amount: number;
+  unit?: 'grams' | 'quantity' | 'liters'; // If not provided, defaults to grams for backward compatibility
 }
 
 export interface RecipeNutrition {
@@ -134,6 +135,29 @@ async function fetchIngredientNutrition(
 }
 
 /**
+ * Convert ingredient amounts from different units to grams for calculation
+ * Conversion factors:
+ * - 1 egg ≈ 50g
+ * - 1 liter = 1000g (assuming density of water, adjust per ingredient)
+ */
+function convertToGrams(amount: number, unit?: 'grams' | 'quantity' | 'liters'): number {
+  const unitType = unit || 'grams';
+  
+  switch (unitType) {
+    case 'quantity':
+      // Average weights for common items measured by quantity
+      // For eggs specifically, 1 egg ≈ 50g
+      return amount * 50;
+    case 'liters':
+      // 1 liter = 1000g (this is approximate for most liquids like water, milk, etc)
+      return amount * 1000;
+    case 'grams':
+    default:
+      return amount;
+  }
+}
+
+/**
  * Calculate nutrition for a single ingredient
  * Formula: nutrient_value = (nutrient_per_100g * amount_in_grams) / 100
  */
@@ -141,7 +165,9 @@ function calculateIngredientNutrition(
   ingredient: Ingredient,
   nutritionPer100g: RecipeNutrition & { calories: number }
 ): IngredientNutrition {
-  const ratio = ingredient.amount / 100;
+  // Convert to grams based on unit
+  const amountInGrams = convertToGrams(ingredient.amount, ingredient.unit);
+  const ratio = amountInGrams / 100;
 
   return {
     name: ingredient.name,

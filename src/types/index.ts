@@ -5,6 +5,8 @@ export interface FoodItem {
   protein: number;
   carbs: number;
   fat: number;
+  sugar?: number;  // grams
+  sodium?: number; // mg
   serving_size: string | number;
   date?: string;
   createdAt?: string;
@@ -17,4 +19,6 @@ export interface DailySummary {
   totalProtein: number;
   totalCarbs: number;
   totalFat: number;
+  totalSugar?: number;  // grams
+  totalSodium?: number; // mg
 }

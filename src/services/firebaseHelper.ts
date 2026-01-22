@@ -39,7 +39,9 @@ export const logFoodItem = async (food: FoodItem, date: string): Promise<void> =
     totalCalories: increment(food.calories),
     totalProtein: increment(food.protein || 0),
     totalCarbs: increment(food.carbs || 0),
-    totalFat: increment(food.fat || 0)
+    totalFat: increment(food.fat || 0),
+    totalSugar: increment(food.sugar || 0),
+    totalSodium: increment(food.sodium || 0)
   }, { merge: true });
 
   await batch.commit();
@@ -77,7 +79,9 @@ export const deleteFoodItem = async (foodId: string, date: string, foodDetails: 
     totalCalories: increment(-foodDetails.calories),
     totalProtein: increment(-(foodDetails.protein || 0)),
     totalCarbs: increment(-(foodDetails.carbs || 0)),
-    totalFat: increment(-(foodDetails.fat || 0))
+    totalFat: increment(-(foodDetails.fat || 0)),
+    totalSugar: increment(-(foodDetails.sugar || 0)),
+    totalSodium: increment(-(foodDetails.sodium || 0))
   });
 
   await batch.commit();
@@ -107,12 +111,16 @@ export const updateFoodServing = async (
   const newProtein = (oldFood.protein || 0) * ratio;
   const newCarbs = (oldFood.carbs || 0) * ratio;
   const newFat = (oldFood.fat || 0) * ratio;
+  const newSugar = (oldFood.sugar || 0) * ratio;
+  const newSodium = (oldFood.sodium || 0) * ratio;
 
   // Difference (to add/subtract from total)
   const calDiff = newCalories - oldFood.calories;
   const proDiff = newProtein - (oldFood.protein || 0);
   const carbDiff = newCarbs - (oldFood.carbs || 0);
   const fatDiff = newFat - (oldFood.fat || 0);
+  const sugarDiff = newSugar - (oldFood.sugar || 0);
+  const sodiumDiff = newSodium - (oldFood.sodium || 0);
 
   const batch = writeBatch(db);
 
@@ -123,7 +131,9 @@ export const updateFoodServing = async (
     calories: newCalories,
     protein: newProtein,
     carbs: newCarbs,
-    fat: newFat
+    fat: newFat,
+    sugar: newSugar,
+    sodium: newSodium
   });
 
   // B. Update the Summary
@@ -132,7 +142,9 @@ export const updateFoodServing = async (
     totalCalories: increment(calDiff),
     totalProtein: increment(proDiff),
     totalCarbs: increment(carbDiff),
-    totalFat: increment(fatDiff)
+    totalFat: increment(fatDiff),
+    totalSugar: increment(sugarDiff),
+    totalSodium: increment(sodiumDiff)
   });
 
   await batch.commit();
