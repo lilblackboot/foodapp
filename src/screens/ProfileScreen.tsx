@@ -1,22 +1,29 @@
 import React, { useEffect, useState, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseConfig';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { calculateDailyNutritionGoals, calculateBMI } from '../services/nutritionCalculator';
 
 export default function ProfileScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  
+
+  // Delete Account Modal State
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
   // Profile State
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [diseases, setDiseases] = useState<string[]>([]);
+  const [bmi, setBmi] = useState(0);
   
   const diseaseOptions = ["Diabetes", "Hypertension", "Celiac", "None"];
 
@@ -39,20 +46,23 @@ export default function ProfileScreen({ navigation }: any) {
     try {
       const user = auth.currentUser;
       if (!user) return;
-      
+
       const docRef = doc(db, "user_profiles", user.uid);
       const snap = await getDoc(docRef);
-      
+
       if (snap.exists()) {
         const data = snap.data();
+        console.log("✅ Profile data loaded:", data);
+        
         setName(data.name);
         setAge(data.age.toString());
         setWeight(data.weight.toString());
         setHeight(data.height.toString());
         setDiseases(data.diseases || ["None"]);
+        setBmi(data.bmi || 0);
       }
     } catch (e) {
-      console.error(e);
+      console.error("❌ Error fetching profile:", e);
     } finally {
       setLoading(false);
     }
@@ -60,7 +70,7 @@ export default function ProfileScreen({ navigation }: any) {
 
   const toggleDisease = (d: string) => {
     if (!isEditing) return; 
-    
+
     if (d === "None") {
       setDiseases(["None"]);
     } else {
@@ -80,19 +90,52 @@ export default function ProfileScreen({ navigation }: any) {
       const user = auth.currentUser;
       if (!user) return;
 
-      const h_m = parseFloat(height) / 100;
-      const bmi = parseFloat((parseFloat(weight) / (h_m * h_m)).toFixed(1));
+      const weightKg = parseFloat(weight);
+      const heightCm = parseFloat(height);
+      const ageYears = parseInt(age);
+
+      // Calculate BMI
+      const bmi = calculateBMI(weightKg, heightCm);
+
+      // Check if user has hypertension for sodium limit adjustment
+      const hasHypertension = diseases.includes("Hypertension");
+
+      // Recalculate daily nutrition goals based on updated stats
+      const nutritionGoals = calculateDailyNutritionGoals(
+        weightKg,
+        heightCm,
+        ageYears,
+        "male", // Default to male; can add gender selection later
+        hasHypertension
+      );
 
       await updateDoc(doc(db, "user_profiles", user.uid), {
-        age: parseInt(age),
-        weight: parseFloat(weight),
-        height: parseFloat(height),
+        age: ageYears,
+        weight: weightKg,
+        height: heightCm,
         diseases,
-        bmi
+        bmi,
+        // Update calculated daily goals and macro limits
+        dailyNutritionGoals: {
+          calories: nutritionGoals.calories,
+          protein: nutritionGoals.protein,
+          carbs: nutritionGoals.carbs,
+          fat: nutritionGoals.fat,
+          sugar: nutritionGoals.sugar,
+          sodium: nutritionGoals.sodium,
+        },
+        customLimits: {
+          calories: nutritionGoals.calories,
+          protein: nutritionGoals.protein,
+          carbs: nutritionGoals.carbs,
+          fat: nutritionGoals.fat,
+          sugar: nutritionGoals.sugar,
+          sodium: nutritionGoals.sodium,
+        }
       });
       
       setIsEditing(false);
-      Alert.alert("Success", "Profile updated!");
+      Alert.alert("Success", `Profile updated!\n\nDaily Goals:\n• Calories: ${nutritionGoals.calories}\n• Protein: ${nutritionGoals.protein}g\n• Carbs: ${nutritionGoals.carbs}g\n• Fat: ${nutritionGoals.fat}g`);
     } catch (e) {
       Alert.alert("Error", "Could not save profile.");
     } finally {
@@ -102,6 +145,54 @@ export default function ProfileScreen({ navigation }: any) {
 
   const handleLogout = async () => {
     await auth.signOut();
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== 'Delete') {
+      Alert.alert('Error', 'Please type "Delete" exactly to confirm.');
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const batch = writeBatch(db);
+      const uid = user.uid;
+
+      // Delete user profile
+      const profileRef = doc(db, 'user_profiles', uid);
+      batch.delete(profileRef);
+
+      // Delete all food logs
+      const foodLogsQuery = query(collection(db, 'users', uid, 'food_logs'));
+      const foodLogsSnap = await getDocs(foodLogsQuery);
+      foodLogsSnap.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      // Delete all daily summaries
+      const summariesQuery = query(collection(db, 'users', uid, 'daily_summaries'));
+      const summariesSnap = await getDocs(summariesQuery);
+      summariesSnap.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+
+      // Delete user authentication
+      await user.delete();
+
+      setDeleteModalVisible(false);
+      setDeleteConfirmation('');
+      
+    } catch (error: any) {
+      console.error('Delete account error:', error);
+      Alert.alert('Error', 'Could not delete account. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={COLORS.primary}/></View>;
@@ -157,6 +248,8 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </View>
 
+        {/* Daily Nutrition Goals - REMOVED, now in HomeScreen */}
+
         {/* Diseases Section */}
         <View style={styles.section}>
           <Text style={styles.label}>Health Conditions</Text>
@@ -192,7 +285,76 @@ export default function ProfileScreen({ navigation }: any) {
           </Text>
         </TouchableOpacity>
 
+        {/* Delete Account Button */}
+        <TouchableOpacity 
+          style={styles.deleteBtn}
+          onPress={() => setDeleteModalVisible(true)}
+        >
+          <Text style={styles.deleteBtnText}>Delete My Account</Text>
+        </TouchableOpacity>
+
       </ScrollView>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal visible={deleteModalVisible} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="warning" size={32} color={COLORS.danger} />
+              <Text style={styles.modalTitle}>Delete Account?</Text>
+            </View>
+            
+            <Text style={styles.modalWarning}>
+              This action cannot be undone. All your data including:
+            </Text>
+            
+            <View style={styles.warningList}>
+              <Text style={styles.warningItem}>• Profile information</Text>
+              <Text style={styles.warningItem}>• Food history</Text>
+              <Text style={styles.warningItem}>• Daily summaries</Text>
+              <Text style={styles.warningItem}>• Account access</Text>
+            </View>
+            
+            <Text style={styles.modalInstruction}>
+              Type "Delete" below to confirm:
+            </Text>
+            
+            <TextInput 
+              style={styles.confirmInput}
+              value={deleteConfirmation}
+              onChangeText={setDeleteConfirmation}
+              placeholder="Type Delete"
+              placeholderTextColor={COLORS.textSecondary}
+              autoFocus
+            />
+
+            <View style={styles.modalBtns}>
+              <TouchableOpacity 
+                style={styles.cancelModalBtn} 
+                onPress={() => {
+                  setDeleteModalVisible(false);
+                  setDeleteConfirmation('');
+                }}
+                disabled={deleting}
+              >
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[
+                  styles.confirmModalBtn, 
+                  deleteConfirmation === 'Delete' ? styles.confirmModalBtnActive : styles.confirmModalBtnDisabled
+                ]}
+                onPress={handleDeleteAccount}
+                disabled={deleting || deleteConfirmation !== 'Delete'}
+              >
+                <Text style={styles.confirmModalBtnText}>
+                  {deleting ? "Deleting..." : "Delete Account"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -201,8 +363,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' },
   scroll: { padding: SPACING.l },
-  
-  // REMOVED THE HEADER STYLE BLOCK COMPLETELY
   
   avatarSection: { alignItems: 'center', marginBottom: SPACING.xl, marginTop: SPACING.m },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.s, borderWidth: 1, borderColor: COLORS.primary },
@@ -226,5 +386,117 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#000', fontWeight: 'bold' },
 
   actionBtn: { padding: SPACING.m, borderRadius: 12, alignItems: 'center', marginTop: SPACING.s },
-  btnText: { color: '#000', fontWeight: 'bold', fontSize: 16 }
+  btnText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
+
+  // Delete Account Button
+  deleteBtn: { 
+    padding: SPACING.m, 
+    borderRadius: 12, 
+    alignItems: 'center', 
+    marginTop: SPACING.l,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderWidth: 1,
+    borderColor: COLORS.danger
+  },
+  deleteBtnText: { 
+    color: COLORS.danger, 
+    fontWeight: 'bold', 
+    fontSize: 16 
+  },
+
+  // Delete Modal Styles
+  modalBg: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.8)', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    paddingHorizontal: SPACING.l
+  },
+  modalCard: { 
+    width: '100%', 
+    maxWidth: 400,
+    backgroundColor: COLORS.surface, 
+    borderRadius: 16, 
+    padding: SPACING.xl,
+    borderWidth: 1,
+    borderColor: '#333'
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: SPACING.m
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
+    marginTop: SPACING.s
+  },
+  modalWarning: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+    marginBottom: SPACING.m
+  },
+  warningList: {
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    padding: SPACING.m,
+    borderRadius: 8,
+    marginBottom: SPACING.m
+  },
+  warningItem: {
+    fontSize: 13,
+    color: COLORS.textPrimary,
+    marginBottom: 2
+  },
+  modalInstruction: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.s
+  },
+  confirmInput: {
+    backgroundColor: COLORS.background,
+    color: COLORS.textPrimary,
+    padding: SPACING.m,
+    borderRadius: 8,
+    fontSize: 16,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+    marginBottom: SPACING.l
+  },
+  modalBtns: { 
+    flexDirection: 'row', 
+    gap: SPACING.m 
+  },
+  cancelModalBtn: {
+    flex: 1,
+    padding: SPACING.m,
+    borderRadius: 8,
+    backgroundColor: '#333',
+    alignItems: 'center'
+  },
+  cancelModalBtnText: {
+    fontSize: 16,
+    color: COLORS.textPrimary,
+    fontWeight: '600'
+  },
+  confirmModalBtn: {
+    flex: 1,
+    padding: SPACING.m,
+    borderRadius: 8,
+    alignItems: 'center'
+  },
+  confirmModalBtnActive: {
+    backgroundColor: COLORS.danger
+  },
+  confirmModalBtnDisabled: {
+    backgroundColor: '#333',
+    opacity: 0.5
+  },
+  confirmModalBtnText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: 'bold'
+  }
 });

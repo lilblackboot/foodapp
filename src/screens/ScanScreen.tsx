@@ -1,9 +1,10 @@
 // src/screens/ScanScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Button, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Button, TouchableOpacity, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { COLORS, SPACING } from '../constants/theme';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function ScanScreen({ navigation }: any) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -60,12 +61,22 @@ export default function ScanScreen({ navigation }: any) {
         <View style={styles.scannerFrame} />
         
         <View style={styles.bottomContent}>
-           {/* Fallback for testing without a barcode */}
+           {/* Option 1: Test without barcode */}
           <TouchableOpacity 
              onPress={() => navigation.navigate('ScanResult', { barcode: 'TEST_COKE' })}
-             style={styles.manualButton}
+             style={styles.optionButton}
           >
-            <Text style={styles.manualText}>No Barcode? Test Here</Text>
+            <MaterialIcons name="qr-code" size={20} color={COLORS.primary} />
+            <Text style={styles.optionText}>No Barcode? Test Here</Text>
+          </TouchableOpacity>
+
+          {/* Option 2: Calculate Recipe Nutrition */}
+          <TouchableOpacity 
+             onPress={() => navigation.navigate('RecipeCalculator')}
+             style={styles.optionButton}
+          >
+            <MaterialIcons name="restaurant-menu" size={20} color={COLORS.secondary} />
+            <Text style={styles.optionText}>Calculate Recipe</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -90,7 +101,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   
-  bottomContent: { paddingBottom: 50 },
+  bottomContent: { paddingBottom: 50, gap: 15 },
+  optionButton: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primary
+  },
+  optionText: { color: COLORS.primary, fontSize: 16, fontWeight: '600' },
   manualButton: { padding: 10 },
   manualText: { color: COLORS.primary, fontSize: 16, textDecorationLine: 'underline' }
 });
