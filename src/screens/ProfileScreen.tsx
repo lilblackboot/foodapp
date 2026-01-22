@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseConfig';
+import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { calculateDailyNutritionGoals, calculateBMI } from '../services/nutritionCalculator';
@@ -16,6 +17,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
 
   // Profile State
   const [name, setName] = useState('');
@@ -153,10 +155,19 @@ export default function ProfileScreen({ navigation }: any) {
       return;
     }
 
+    if (!passwordInput) {
+      Alert.alert('Error', 'Please enter your password to confirm deletion.');
+      return;
+    }
+
     setDeleting(true);
     try {
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user || !user.email) return;
+
+      // Reauthenticate user
+      const credential = EmailAuthProvider.credential(user.email, passwordInput);
+      await reauthenticateWithCredential(user, credential);
 
       const batch = writeBatch(db);
       const uid = user.uid;
@@ -186,10 +197,17 @@ export default function ProfileScreen({ navigation }: any) {
 
       setDeleteModalVisible(false);
       setDeleteConfirmation('');
+      setPasswordInput('');
       
     } catch (error: any) {
       console.error('Delete account error:', error);
-      Alert.alert('Error', 'Could not delete account. Please try again.');
+      if (error.code === 'auth/wrong-password') {
+        Alert.alert('Error', 'Incorrect password. Please try again.');
+      } else if (error.code === 'auth/requires-recent-login') {
+        Alert.alert('Error', 'Please log out and log back in, then try deleting your account again.');
+      } else {
+        Alert.alert('Error', 'Could not delete account. Please try again.');
+      }
     } finally {
       setDeleting(false);
     }
@@ -328,12 +346,26 @@ export default function ProfileScreen({ navigation }: any) {
               autoFocus
             />
 
+            <Text style={styles.modalInstruction}>
+              Enter your password to confirm:
+            </Text>
+            
+            <TextInput 
+              style={styles.confirmInput}
+              value={passwordInput}
+              onChangeText={setPasswordInput}
+              placeholder="Password"
+              placeholderTextColor={COLORS.textSecondary}
+              secureTextEntry
+            />
+
             <View style={styles.modalBtns}>
               <TouchableOpacity 
                 style={styles.cancelModalBtn} 
                 onPress={() => {
                   setDeleteModalVisible(false);
                   setDeleteConfirmation('');
+                  setPasswordInput('');
                 }}
                 disabled={deleting}
               >
@@ -342,10 +374,10 @@ export default function ProfileScreen({ navigation }: any) {
               <TouchableOpacity 
                 style={[
                   styles.confirmModalBtn, 
-                  deleteConfirmation === 'Delete' ? styles.confirmModalBtnActive : styles.confirmModalBtnDisabled
+                  deleteConfirmation === 'Delete' && passwordInput ? styles.confirmModalBtnActive : styles.confirmModalBtnDisabled
                 ]}
                 onPress={handleDeleteAccount}
-                disabled={deleting || deleteConfirmation !== 'Delete'}
+                disabled={deleting || deleteConfirmation !== 'Delete' || !passwordInput}
               >
                 <Text style={styles.confirmModalBtnText}>
                   {deleting ? "Deleting..." : "Delete Account"}

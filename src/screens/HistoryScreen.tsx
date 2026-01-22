@@ -1,7 +1,8 @@
 // src/screens/HistoryScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, LayoutAnimation, Platform, UIManager, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { getHistory, getFoodsByDate } from '../services/firebaseHelper';
@@ -49,6 +50,9 @@ const HistoryItem = ({ data }: { data: DailySummary }) => {
           <Text style={styles.summaryText}>
             {Math.round(data.totalCalories)} kcal | P: {Math.round(data.totalProtein)} | C: {Math.round(data.totalCarbs)} | F: {Math.round(data.totalFat)}
           </Text>
+          <Text style={styles.micronutrientText}>
+            Sugar: {Math.round(data.totalSugar || 0)}g | Sodium: {Math.round(data.totalSodium || 0)}mg
+          </Text>
         </View>
         <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={20} color={COLORS.textSecondary} />
       </TouchableOpacity>
@@ -94,6 +98,13 @@ export default function HistoryScreen() {
   useEffect(() => {
     loadHistory();
   }, []);
+
+  // Auto-refresh when navigating back to this screen
+  useFocusEffect(
+    useCallback(() => {
+      loadHistory();
+    }, [])
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -153,6 +164,12 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary, 
     fontSize: 12, 
     marginTop: 4 
+  },
+  micronutrientText: {
+    color: COLORS.primary,
+    fontSize: 11,
+    marginTop: 4,
+    fontStyle: 'italic'
   },
 
   // Expanded Area Styles
