@@ -175,7 +175,8 @@ export default function HomeScreen({ navigation }: any) {
         <FoodList 
             currentDate={getTodayDate()} 
             refreshTrigger={refreshKey} 
-            onUpdate={handleDataUpdate} 
+            onUpdate={handleDataUpdate}
+            navigation={navigation}
         />
 
         {/* Spacer */}
