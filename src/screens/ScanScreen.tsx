@@ -61,22 +61,14 @@ export default function ScanScreen({ navigation }: any) {
         <View style={styles.scannerFrame} />
         
         <View style={styles.bottomContent}>
-           {/* Option 1: Test without barcode */}
-          <TouchableOpacity 
-             onPress={() => navigation.navigate('ScanResult', { barcode: 'TEST_COKE' })}
-             style={styles.optionButton}
-          >
-            <MaterialIcons name="qr-code" size={20} color={COLORS.primary} />
-            <Text style={styles.optionText}>No Barcode? Test Here</Text>
-          </TouchableOpacity>
+           
 
           {/* Option 2: Calculate Recipe Nutrition */}
           <TouchableOpacity 
              onPress={() => navigation.navigate('RecipeCalculator')}
              style={styles.optionButton}
           >
-            <MaterialIcons name="restaurant-menu" size={20} color={COLORS.secondary} />
-            <Text style={styles.optionText}>Calculate Recipe</Text>
+            <Text style={styles.optionText}>Add Recipe</Text>
           </TouchableOpacity>
         </View>
       </View>
