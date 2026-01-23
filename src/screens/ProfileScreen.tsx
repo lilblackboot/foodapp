@@ -26,8 +26,46 @@ export default function ProfileScreen({ navigation }: any) {
   const [height, setHeight] = useState('');
   const [diseases, setDiseases] = useState<string[]>([]);
   const [bmi, setBmi] = useState(0);
-  
+
+  const [dob, setDob] = useState('');
+  const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | 'Prefer not to say' | ''>('');
+  const [waist, setWaist] = useState('');
+  const [activityLevel, setActivityLevel] = useState<'Sedentary' | 'Lightly active' | 'Moderately active' | 'Very active' | ''>('');
+
+  const [onMedication, setOnMedication] = useState<'Yes' | 'No' | ''>('');
+  const [medCategories, setMedCategories] = useState<string[]>([]);
+  const [medTiming, setMedTiming] = useState<'Before food' | 'After food' | 'Anytime' | ''>('');
+
+  const [dietPattern, setDietPattern] = useState<'Vegetarian' | 'Eggetarian' | 'Non-vegetarian' | 'Vegan' | ''>('');
+  const [fastingHabit, setFastingHabit] = useState<'Yes' | 'No' | ''>('');
+  const [fastingType, setFastingType] = useState<'Intermittent fasting' | 'Religious fasting' | ''>('');
+
+  const [allergies, setAllergies] = useState<string[]>([]);
+  const [smoking, setSmoking] = useState<'Never' | 'Former' | 'Current' | ''>('');
+  const [alcohol, setAlcohol] = useState<'Never' | 'Occasionally' | 'Weekly' | 'Daily' | ''>('');
+  const [sleepHours, setSleepHours] = useState('');
+  const [stressLevel, setStressLevel] = useState<'Low' | 'Medium' | 'High' | ''>('');
+  const [packagedFoodFrequency, setPackagedFoodFrequency] = useState<'Rare' | '1–2× weekly' | '3–5× weekly' | 'Daily' | ''>('');
+  const [healthGoals, setHealthGoals] = useState<string[]>([]);
+
   const diseaseOptions = ["Diabetes", "Hypertension", "Celiac", "None"];
+
+  const genderOptions: Array<'Male' | 'Female' | 'Other' | 'Prefer not to say'> = ['Male', 'Female', 'Other', 'Prefer not to say'];
+  const activityOptions: Array<'Sedentary' | 'Lightly active' | 'Moderately active' | 'Very active'> = ['Sedentary', 'Lightly active', 'Moderately active', 'Very active'];
+  const yesNoOptions: Array<'Yes' | 'No'> = ['Yes', 'No'];
+
+  const medCategoryOptions = ['Diabetes', 'Blood pressure', 'Thyroid', 'Steroids', 'Painkillers', 'Antibiotics', 'Other'];
+  const medTimingOptions: Array<'Before food' | 'After food' | 'Anytime'> = ['Before food', 'After food', 'Anytime'];
+
+  const dietPatternOptions: Array<'Vegetarian' | 'Eggetarian' | 'Non-vegetarian' | 'Vegan'> = ['Vegetarian', 'Eggetarian', 'Non-vegetarian', 'Vegan'];
+  const fastingTypeOptions: Array<'Intermittent fasting' | 'Religious fasting'> = ['Intermittent fasting', 'Religious fasting'];
+
+  const allergyOptions = ['Milk', 'Eggs', 'Peanuts', 'Tree nuts', 'Soy', 'Wheat/Gluten', 'Fish', 'Shellfish', 'Sesame', 'None'];
+  const smokingOptions: Array<'Never' | 'Former' | 'Current'> = ['Never', 'Former', 'Current'];
+  const alcoholOptions: Array<'Never' | 'Occasionally' | 'Weekly' | 'Daily'> = ['Never', 'Occasionally', 'Weekly', 'Daily'];
+  const stressOptions: Array<'Low' | 'Medium' | 'High'> = ['Low', 'Medium', 'High'];
+  const packagedFoodOptions: Array<'Rare' | '1–2× weekly' | '3–5× weekly' | 'Daily'> = ['Rare', '1–2× weekly', '3–5× weekly', 'Daily'];
+  const healthGoalOptions = ['Fat loss', 'Muscle building', 'Stay fit', 'Gain weight', 'Better digestion', 'Better sleep', 'Manage diabetes', 'Lower BP'];
 
   // 1. MOVE LOGOUT TO THE NATIVE HEADER
   useLayoutEffect(() => {
@@ -57,11 +95,33 @@ export default function ProfileScreen({ navigation }: any) {
         console.log("✅ Profile data loaded:", data);
         
         setName(data.name);
-        setAge(data.age.toString());
-        setWeight(data.weight.toString());
-        setHeight(data.height.toString());
-        setDiseases(data.diseases || ["None"]);
+        setAge(data.age?.toString?.() ?? '');
+        setWeight(data.weight?.toString?.() ?? '');
+        setHeight(data.height?.toString?.() ?? '');
+        setDiseases(Array.isArray(data.diseases) ? data.diseases : ["None"]);
         setBmi(data.bmi || 0);
+
+        setDob(data.dob || '');
+        setGender(data.gender || '');
+        setWaist(data.waist !== null && data.waist !== undefined ? String(data.waist) : '');
+        setActivityLevel(data.activityLevel || '');
+
+        setOnMedication(data?.medication?.onMedication || '');
+        setMedCategories(Array.isArray(data?.medication?.categories) ? data.medication.categories : []);
+        setMedTiming(data?.medication?.timingSensitivity || '');
+
+        setDietPattern(data?.diet?.pattern || '');
+        setFastingHabit(data?.diet?.fastingHabits || '');
+        setFastingType(data?.diet?.fastingType || '');
+
+        setAllergies(Array.isArray(data?.allergies) ? data.allergies : []);
+        setSmoking(data?.lifestyle?.smoking || '');
+        setAlcohol(data?.lifestyle?.alcohol || '');
+        setSleepHours(data?.lifestyle?.sleepHours !== null && data?.lifestyle?.sleepHours !== undefined ? String(data.lifestyle.sleepHours) : '');
+        setStressLevel(data?.lifestyle?.stressLevel || '');
+
+        setPackagedFoodFrequency(data?.dailyFoodBehavior?.packagedFoodFrequency || '');
+        setHealthGoals(Array.isArray(data?.healthGoals) ? data.healthGoals : []);
       }
     } catch (e) {
       console.error("❌ Error fetching profile:", e);
@@ -86,6 +146,27 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
+  const toggleMultiSelect = (
+    value: string,
+    current: string[],
+    setCurrent: React.Dispatch<React.SetStateAction<string[]>>,
+    noneValue = 'None'
+  ) => {
+    if (!isEditing) return;
+    if (value === noneValue) {
+      setCurrent([noneValue]);
+      return;
+    }
+
+    const withoutNone = current.filter((x) => x !== noneValue);
+    if (withoutNone.includes(value)) {
+      const next = withoutNone.filter((x) => x !== value);
+      setCurrent(next.length > 0 ? next : [noneValue]);
+    } else {
+      setCurrent([...withoutNone, value]);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -107,15 +188,40 @@ export default function ProfileScreen({ navigation }: any) {
         weightKg,
         heightCm,
         ageYears,
-        "male", // Default to male; can add gender selection later
+        gender === 'Female' ? 'female' : 'male',
         hasHypertension
       );
 
       await updateDoc(doc(db, "user_profiles", user.uid), {
         age: ageYears,
+        dob,
+        gender,
         weight: weightKg,
         height: heightCm,
+        waist: waist ? parseFloat(waist) : null,
+        activityLevel,
         diseases,
+        medication: {
+          onMedication,
+          categories: onMedication === 'Yes' ? medCategories.filter((x) => x !== 'None') : [],
+          timingSensitivity: onMedication === 'Yes' ? medTiming : ''
+        },
+        diet: {
+          pattern: dietPattern,
+          fastingHabits: fastingHabit,
+          fastingType: fastingHabit === 'Yes' ? fastingType : ''
+        },
+        allergies: allergies.length > 0 ? allergies : ["None"],
+        lifestyle: {
+          smoking,
+          alcohol,
+          sleepHours: sleepHours ? parseFloat(sleepHours) : null,
+          stressLevel
+        },
+        dailyFoodBehavior: {
+          packagedFoodFrequency,
+        },
+        healthGoals,
         bmi,
         // Update calculated daily goals and macro limits
         dailyNutritionGoals: {
@@ -266,7 +372,263 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* Daily Nutrition Goals - REMOVED, now in HomeScreen */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Identity</Text>
+          <Text style={styles.statLabel}>Date of Birth</Text>
+          <TextInput
+            value={dob}
+            onChangeText={setDob}
+            editable={isEditing}
+            style={[styles.input, { textAlign: 'left' }, isEditing && styles.inputEditable]}
+            placeholder="DD/MM/YYYY"
+            placeholderTextColor={COLORS.textSecondary}
+          />
+
+          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Gender</Text>
+          <View style={styles.chipContainer}>
+            {genderOptions.map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.chip, gender === g && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setGender(g)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, gender === g && styles.chipTextActive]}>{g}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Body Metrics</Text>
+          <Text style={styles.statLabel}>Waist (cm)</Text>
+          <TextInput
+            value={waist}
+            onChangeText={setWaist}
+            editable={isEditing}
+            style={[styles.input, { textAlign: 'left' }, isEditing && styles.inputEditable]}
+            keyboardType="numeric"
+            placeholder="e.g. 80"
+            placeholderTextColor={COLORS.textSecondary}
+          />
+
+          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Activity level</Text>
+          <View style={styles.chipContainer}>
+            {activityOptions.map((a) => (
+              <TouchableOpacity
+                key={a}
+                style={[styles.chip, activityLevel === a && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setActivityLevel(a)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, activityLevel === a && styles.chipTextActive]}>{a}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Medication</Text>
+          <Text style={styles.statLabel}>On medication?</Text>
+          <View style={styles.chipContainer}>
+            {yesNoOptions.map((v) => (
+              <TouchableOpacity
+                key={v}
+                style={[styles.chip, onMedication === v && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setOnMedication(v)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, onMedication === v && styles.chipTextActive]}>{v}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {onMedication === 'Yes' && (
+            <>
+              <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Medication categories</Text>
+              <View style={styles.chipContainer}>
+                {medCategoryOptions.map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.chip, medCategories.includes(m) && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => toggleMultiSelect(m, medCategories, setMedCategories)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, medCategories.includes(m) && styles.chipTextActive]}>{m}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Timing sensitivity</Text>
+              <View style={styles.chipContainer}>
+                {medTimingOptions.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.chip, medTiming === t && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => isEditing && setMedTiming(t)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, medTiming === t && styles.chipTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Diet</Text>
+          <Text style={styles.statLabel}>Diet pattern</Text>
+          <View style={styles.chipContainer}>
+            {dietPatternOptions.map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={[styles.chip, dietPattern === p && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setDietPattern(p)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, dietPattern === p && styles.chipTextActive]}>{p}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Do you do fasting?</Text>
+          <View style={styles.chipContainer}>
+            {yesNoOptions.map((v) => (
+              <TouchableOpacity
+                key={v}
+                style={[styles.chip, fastingHabit === v && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setFastingHabit(v)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, fastingHabit === v && styles.chipTextActive]}>{v}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {fastingHabit === 'Yes' && (
+            <>
+              <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Fasting type</Text>
+              <View style={styles.chipContainer}>
+                {fastingTypeOptions.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.chip, fastingType === t && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => isEditing && setFastingType(t)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, fastingType === t && styles.chipTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Allergies</Text>
+          <View style={styles.chipContainer}>
+            {allergyOptions.map((a) => (
+              <TouchableOpacity
+                key={a}
+                style={[styles.chip, allergies.includes(a) && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => toggleMultiSelect(a, allergies, setAllergies)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, allergies.includes(a) && styles.chipTextActive]}>{a}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Lifestyle</Text>
+          <Text style={styles.statLabel}>Smoking</Text>
+          <View style={styles.chipContainer}>
+            {smokingOptions.map((s) => (
+              <TouchableOpacity
+                key={s}
+                style={[styles.chip, smoking === s && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setSmoking(s)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, smoking === s && styles.chipTextActive]}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Alcohol</Text>
+          <View style={styles.chipContainer}>
+            {alcoholOptions.map((a) => (
+              <TouchableOpacity
+                key={a}
+                style={[styles.chip, alcohol === a && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setAlcohol(a)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, alcohol === a && styles.chipTextActive]}>{a}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Average sleep duration (hours)</Text>
+          <TextInput
+            value={sleepHours}
+            onChangeText={setSleepHours}
+            editable={isEditing}
+            style={[styles.input, { textAlign: 'left' }, isEditing && styles.inputEditable]}
+            keyboardType="numeric"
+            placeholder="e.g. 7"
+            placeholderTextColor={COLORS.textSecondary}
+          />
+
+          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Stress level</Text>
+          <View style={styles.chipContainer}>
+            {stressOptions.map((st) => (
+              <TouchableOpacity
+                key={st}
+                style={[styles.chip, stressLevel === st && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setStressLevel(st)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, stressLevel === st && styles.chipTextActive]}>{st}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Food Behavior</Text>
+          <Text style={styles.statLabel}>Packaged food frequency</Text>
+          <View style={styles.chipContainer}>
+            {packagedFoodOptions.map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={[styles.chip, packagedFoodFrequency === p && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && setPackagedFoodFrequency(p)}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, packagedFoodFrequency === p && styles.chipTextActive]}>{p}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Health Goals</Text>
+          <View style={styles.chipContainer}>
+            {healthGoalOptions.map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.chip, healthGoals.includes(g) && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => toggleMultiSelect(g, healthGoals, setHealthGoals, '__none__')}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, healthGoals.includes(g) && styles.chipTextActive]}>{g}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
         {/* Diseases Section */}
         <View style={styles.section}>

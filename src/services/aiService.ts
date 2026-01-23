@@ -16,11 +16,40 @@ export async function getFoodAnalysis(
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // 1. Context (Keep data precise, but ask for simple output)
-    const conditions = userProfile.diseases && userProfile.diseases.length > 0 
-      ? userProfile.diseases.join(", ") 
-      : "None";
-    
-    const userContext = `User: Age ${userProfile.age}, BMI ${userProfile.bmi}, Conditions: ${conditions}`;
+    const safeJoin = (arr: any, fallback: string) => {
+      if (!Array.isArray(arr) || arr.length === 0) return fallback;
+      const cleaned = arr
+        .filter(Boolean)
+        .map((x: any) => String(x).trim())
+        .filter((x: string) => x.length > 0);
+      return cleaned.length > 0 ? cleaned.join(", ") : fallback;
+    };
+
+    const conditions = safeJoin(userProfile?.diseases, "None");
+    const allergies = safeJoin(userProfile?.allergies, "None");
+    const goals = safeJoin(userProfile?.healthGoals, "None");
+
+    const gender = userProfile?.gender ? String(userProfile.gender) : "Unknown";
+    const activity = userProfile?.activityLevel ? String(userProfile.activityLevel) : "Unknown";
+    const dietPattern = userProfile?.diet?.pattern ? String(userProfile.diet.pattern) : "Unknown";
+
+    const onMeds = userProfile?.medication?.onMedication ? String(userProfile.medication.onMedication) : "Unknown";
+    const medCats = safeJoin(userProfile?.medication?.categories, "None");
+
+    const userAge = userProfile?.age ?? "Unknown";
+    const userBmi = userProfile?.bmi ?? "Unknown";
+
+    const userContext = `User Profile:
+    - Age: ${userAge}
+    - Gender: ${gender}
+    - BMI: ${userBmi}
+    - Activity: ${activity}
+    - Diet: ${dietPattern}
+    - Conditions: ${conditions}
+    - Allergies/Sensitivities: ${allergies}
+    - Medication: ${onMeds} (Categories: ${medCats})
+    - Goals: ${goals}
+    `;
     
     const foodContext = `
     Food: ${foodName}
@@ -31,17 +60,11 @@ export async function getFoodAnalysis(
     // 2. The Simplified Prompt
     const prompt = `
     You are a helpful nutrition coach. Analyze this food for the user.
-    
+
     INPUT:
     ${userContext}
     ${foodContext}
     System Flag: ${ruleDecision}
-
-    INSTRUCTIONS:
-    Explain the health effects in SIMPLE, EVERYDAY LANGUAGE (8th-grade reading level). 
-    Avoid complex medical jargon. Keep it short and easy to scan.
-
-    OUTPUT FORMAT (Use these 3 headings):
 
     ### 1. How it affects you
     - Explain simply how the Sugar, Salt, or Fat affects THIS specific user (e.g., "High sugar is risky for your Diabetes").
@@ -50,6 +73,7 @@ export async function getFoodAnalysis(
     ### 2. What's inside?
     - Point out any bad additives or chemicals in simple terms.
     - Mention if ingredients are generally considered unsafe or unhealthy in India.
+    - If any ingredient conflicts with the user's allergies/sensitivities, clearly warn.
 
     ### 3. Verification & Advice
     - Give a clear verdict: Is it safe to eat daily, weekly, or rarely?

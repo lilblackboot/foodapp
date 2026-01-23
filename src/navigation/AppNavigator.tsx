@@ -138,7 +138,12 @@ export default function AppNavigator() {
         try {
           const docRef = doc(db, "user_profiles", u.uid);
           const docSnap = await getDoc(docRef);
-          setHasProfile(docSnap.exists());
+          if (!docSnap.exists()) {
+            setHasProfile(false);
+          } else {
+            const data: any = docSnap.data();
+            setHasProfile(Boolean(data?.profileVersion && data.profileVersion >= 2));
+          }
         } catch (e) {
           setHasProfile(false);
         }
