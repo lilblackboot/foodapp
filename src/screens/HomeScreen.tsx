@@ -86,42 +86,54 @@ export default function HomeScreen({ navigation }: any) {
           });
         }
 
-        // Calculate score based on nutrition profile
-        const calories = foodData.calories || 0;
-        const protein = foodData.protein || 0;
-        const carbs = foodData.carbs || 0;
-        const fat = foodData.fat || 0;
-        const sugar = foodData.sugar || 0;
-        const sodium = foodData.sodium || 0;
+        // Calculate score based on AI Food Analysis tag (prioritize this)
+        const tag = foodData.foodAnalysis?.overallTag?.toLowerCase() || '';
+        let foodScore = 50; // Neutral base
 
-        let foodScore = 50; // Base score
+        if (tag === 'safe') {
+          foodScore = 100; // Best choices
+        } else if (tag === 'low risk') {
+          foodScore = 80;  // Good choices
+        } else if (tag === 'moderate risk') {
+          foodScore = 40;  // Fair choices
+        } else if (tag === 'high risk') {
+          foodScore = 10;  // Poor choices
+        } else {
+          // Fallback to legacy macro logic if no AI tag is available
+          const calories = foodData.calories || 0;
+          const protein = foodData.protein || 0;
+          const carbs = foodData.carbs || 0;
+          const fat = foodData.fat || 0;
+          const sugar = foodData.sugar || 0;
+          const sodium = foodData.sodium || 0;
 
-        // Protein bonus (good for vitality)
-        if (protein > 20 && protein <= 40) foodScore += 15;
-        else if (protein > 40) foodScore += 10;
-        else if (protein > 10) foodScore += 5;
+          // Protein bonus (good for vitality)
+          if (protein > 20 && protein <= 40) foodScore += 15;
+          else if (protein > 40) foodScore += 10;
+          else if (protein > 10) foodScore += 5;
 
-        // Sugar penalty (bad for vitality)
-        if (sugar > 30) foodScore -= 20;
-        else if (sugar > 20) foodScore -= 10;
-        else if (sugar > 10) foodScore -= 5;
+          // Sugar penalty (bad for vitality)
+          if (sugar > 30) foodScore -= 20;
+          else if (sugar > 20) foodScore -= 10;
+          else if (sugar > 10) foodScore -= 5;
 
-        // Sodium penalty
-        if (sodium > 2000) foodScore -= 15;
-        else if (sodium > 1500) foodScore -= 8;
-        else if (sodium > 1000) foodScore -= 3;
+          // Sodium penalty
+          if (sodium > 2000) foodScore -= 15;
+          else if (sodium > 1500) foodScore -= 8;
+          else if (sodium > 1000) foodScore -= 3;
 
-        // Fat balance
-        if (fat > 0 && fat <= 30) foodScore += 5;
-        else if (fat > 50) foodScore -= 10;
+          // Fat balance
+          if (fat > 0 && fat <= 30) foodScore += 5;
+          else if (fat > 50) foodScore -= 10;
 
-        // Calorie balance
-        if (calories > 0 && calories <= 600) foodScore += 5;
-        else if (calories > 800) foodScore -= 10;
+          // Calorie balance
+          if (calories > 0 && calories <= 600) foodScore += 5;
+          else if (calories > 800) foodScore -= 10;
 
-        // Carbs quality (complex vs simple)
-        if (carbs > 0 && carbs <= 80) foodScore += 5;
-        else if (carbs > 120) foodScore -= 8;
+          // Carbs quality (complex vs simple)
+          if (carbs > 0 && carbs <= 80) foodScore += 5;
+          else if (carbs > 120) foodScore -= 8;
+        }
 
         foodScore = Math.max(0, Math.min(100, foodScore)); // Clamp between 0-100
         totalScore += foodScore;
@@ -183,32 +195,44 @@ export default function HomeScreen({ navigation }: any) {
   const getVitalityInfo = (score: number | null) => {
     if (score === null) {
       return {
-        color: COLORS.on_surface_variant,
-        message: 'Log food to get vitality score',
-        subMessage: 'Start tracking your meals today',
+        color: '#6B7280', // Neutral gray
+        bg: '#6B7280',
+        message: 'NO DATA',
+        subMessage: 'Log food to get your vitality score today.',
         progress: 0
       };
     }
 
-    if (score >= 80) {
+    if (score >= 70) {
       return {
-        color: COLORS.primary,
-        message: 'Excellent vitality!',
-        subMessage: 'You\'re making great food choices',
+        color: '#FFFFFF',
+        bg: '#2A9A4A', // Green
+        message: 'GOOD',
+        subMessage: "You're making great food choices! Keep prioritizing nutrient-dense greens.",
         progress: score
       };
-    } else if (score >= 60) {
+    } else if (score >= 40) {
       return {
-        color: COLORS.risk_medium,
-        message: 'Good vitality',
-        subMessage: 'Room for improvement',
+        color: '#FFFFFF',
+        bg: '#EAB308', // Yellow
+        message: 'TRY EATING HEALTHIER',
+        subMessage: "You're on track, but try swapping some processed items for fresh whole foods.",
+        progress: score
+      };
+    } else if (score >= 20) {
+      return {
+        color: '#FFFFFF',
+        bg: '#F97316', // Orange
+        message: 'BAD',
+        subMessage: "Focus on eating more colorful, raw, and nutrient-dense foods to boost your score.",
         progress: score
       };
     } else {
       return {
-        color: COLORS.error,
-        message: 'Low vitality',
-        subMessage: 'Focus on healthier choices',
+        color: '#FFFFFF',
+        bg: '#DC2626', // Red
+        message: 'SEVERELY BAD',
+        subMessage: "Your food choices today need significant improvement. Try eating more whole foods and vegetables.",
         progress: score
       };
     }
@@ -241,63 +265,66 @@ export default function HomeScreen({ navigation }: any) {
         </View>
 
         {/* Vitality Score Card */}
-        <View style={styles.vitalityCard}>
+        <View style={[styles.vitalityCard, { backgroundColor: vitalityInfo.bg }]}>
           <View style={styles.vitalityHeader}>
-            <Text style={styles.vitalityTitle}>Today's Vitality</Text>
-            <View style={styles.vitalityBadge}>
-              <Text style={styles.vitalityBadgeText}>
-                {vitalityScore !== null ? `${vitalityScore}/100` : 'No data'}
-              </Text>
+            <View>
+              <Text style={styles.dailyWellnessText}>DAILY WELLNESS</Text>
+              <Text style={styles.vitalityTitle}>Vitality Score</Text>
             </View>
+            <Ionicons name="flash" size={28} color="#FFFFFF" />
           </View>
 
-          {/* Circular Progress */}
-          <View style={styles.progressContainer}>
-            {loading ? (
-              <ActivityIndicator size={120} color={COLORS.primary} />
-            ) : (
-              <View style={styles.circleContainer}>
-                <Svg width={200} height={200}>
-                  {/* Background circle */}
-                  <Circle
-                    cx={100}
-                    cy={100}
-                    r={90}
-                    stroke={COLORS.surface_container_highest}
-                    strokeWidth={15}
-                    fill="transparent"
-                  />
-                  {/* Progress circle */}
-                  <Circle
-                    cx={100}
-                    cy={100}
-                    r={90}
-                    stroke={COLORS.primary}
-                    strokeWidth={15}
-                    fill="transparent"
-                    strokeDasharray={`${2 * Math.PI * 90}`}
-                    strokeDashoffset={`${2 * Math.PI * 90 * (1 - vitalityInfo.progress / 100)}`}
-                    strokeLinecap="round"
-                    transform={`rotate(-90 100 100)`}
-                  />
-                </Svg>
-                <View style={styles.scoreOverlay}>
-                  <Text style={styles.scoreText}>
-                    {vitalityScore !== null ? vitalityScore : '--'}
-                  </Text>
-                  <Text style={styles.scoreLabel}>Score</Text>
+          <View style={styles.vitalityContent}>
+            {/* Circular Progress */}
+            <View style={styles.progressContainer}>
+              {loading ? (
+                <ActivityIndicator size={100} color="#FFFFFF" />
+              ) : (
+                <View style={styles.circleContainer}>
+                  <Svg width={100} height={100}>
+                    {/* Background circle */}
+                    <Circle
+                      cx={50}
+                      cy={50}
+                      r={42}
+                      stroke="rgba(0,0,0,0.15)"
+                      strokeWidth={10}
+                      fill="transparent"
+                    />
+                    {/* Progress circle */}
+                    <Circle
+                      cx={50}
+                      cy={50}
+                      r={42}
+                      stroke="rgba(255,255,255,0.9)"
+                      strokeWidth={10}
+                      fill="transparent"
+                      strokeDasharray={`${2 * Math.PI * 42}`}
+                      strokeDashoffset={`${2 * Math.PI * 42 * (1 - vitalityInfo.progress / 100)}`}
+                      strokeLinecap="round"
+                      transform={`rotate(-90 50 50)`}
+                    />
+                  </Svg>
+                  <View style={styles.scoreOverlay}>
+                    <Text style={styles.scoreText}>
+                      {vitalityScore !== null ? `${vitalityScore}%` : '--'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* Vitality Message & Pills */}
+            <View style={styles.vitalityTextContainer}>
+              <Text style={styles.subMessageText}>
+                {vitalityInfo.subMessage}
+              </Text>
+              <View style={styles.vitalityBadgesRow}>
+                <View style={styles.vitalityPill}>
+                  <Text style={styles.vitalityPillText}>{vitalityInfo.message.toUpperCase()}</Text>
                 </View>
               </View>
-            )}
-          </View>
-
-          <View style={styles.vitalityMessage}>
-            <Text style={styles.messageText}>
-              {vitalityInfo.message}
-            </Text>
-            <Text style={styles.subMessageText}>
-              {vitalityInfo.subMessage}
-            </Text>
+            </View>
           </View>
         </View>
 
@@ -486,46 +513,46 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // Vitality Card
+  // Vitality Card Redesign
   vitalityCard: {
-    backgroundColor: COLORS.surface_container_lowest,
-    borderRadius: BORDER_RADIUS.xl, // 24px
-    padding: SPACING.xxl,
+    borderRadius: 24,
+    padding: SPACING.l,
     marginBottom: SPACING.xxl,
-    borderWidth: 1,
-    borderColor: COLORS.outline_variant,
-    opacity: 0.3,
-    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
   },
   vitalityHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: SPACING.xl,
+    alignItems: 'flex-start',
+    marginBottom: SPACING.l,
+  },
+  dailyWellnessText: {
+    fontFamily: FONTS.body,
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.75)',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 4,
   },
   vitalityTitle: {
     fontFamily: FONTS.display,
-    fontSize: TYPOGRAPHY.headline_md, // 28px
-    fontWeight: FONTS.weight_bold,
-    color: COLORS.on_surface,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
-  vitalityBadge: {
-    backgroundColor: COLORS.surface_container_highest,
-    paddingHorizontal: SPACING.m,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.md,
+  vitalityContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.l,
   },
-  vitalityBadgeText: {
-    fontFamily: FONTS.body,
-    fontSize: TYPOGRAPHY.label_sm, // 11px
-    fontWeight: FONTS.weight_medium,
-    color: COLORS.on_surface_variant,
-  },
-
-  // Progress Circle
   progressContainer: {
-    marginVertical: SPACING.xl,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   circleContainer: {
     position: 'relative',
@@ -539,36 +566,38 @@ const styles = StyleSheet.create({
   },
   scoreText: {
     fontFamily: FONTS.display,
-    fontSize: TYPOGRAPHY.display_lg, // 56px
-    fontWeight: FONTS.weight_bold,
-    color: COLORS.on_surface,
-    lineHeight: 60,
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
-  scoreLabel: {
-    fontFamily: FONTS.body,
-    fontSize: TYPOGRAPHY.body_sm, // 12px
-    color: COLORS.on_surface_variant,
-    marginTop: SPACING.xs,
-  },
-
-  // Vitality Message
-  vitalityMessage: {
-    alignItems: 'center',
-    marginTop: SPACING.l,
-  },
-  messageText: {
-    fontFamily: FONTS.display,
-    fontSize: TYPOGRAPHY.headline_sm, // 24px
-    fontWeight: FONTS.weight_bold,
-    color: COLORS.on_surface,
-    textAlign: 'center',
-    marginBottom: SPACING.s,
+  vitalityTextContainer: {
+    flex: 1,
   },
   subMessageText: {
     fontFamily: FONTS.body,
-    fontSize: TYPOGRAPHY.body_md, // 14px
-    color: COLORS.on_surface_variant,
-    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    lineHeight: 20,
+    marginBottom: SPACING.m,
+  },
+  vitalityBadgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  vitalityPill: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  vitalityPillText: {
+    fontFamily: FONTS.body,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
   },
 
   // Quick Actions
