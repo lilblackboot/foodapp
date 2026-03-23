@@ -2,97 +2,19 @@ import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   View, Text, TextInput, TouchableOpacity, StyleSheet,  
-  KeyboardAvoidingView, Platform, Alert 
+  KeyboardAvoidingView, Platform, Alert, ScrollView
 } from 'react-native';
-import { COLORS, SPACING, FONTS } from '../constants/theme';
-import { signInAnonymously, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore'; 
-import { auth, db } from '../services/firebaseConfig';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, SPACING, TYPOGRAPHY, FONTS, BORDER_RADIUS, ELEVATION } from '../constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../services/firebaseConfig';
 
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const handleDevBypass = async () => {
-    if (!__DEV__) return;
-
-    const devEmail = process.env.EXPO_PUBLIC_DEV_EMAIL || email;
-    const devPassword = process.env.EXPO_PUBLIC_DEV_PASSWORD || password;
-
-    setLoading(true);
-    try {
-      if (devEmail && devPassword) {
-        await signInWithEmailAndPassword(auth, devEmail, devPassword);
-      } else {
-        await signInAnonymously(auth);
-      }
-
-      const user = auth.currentUser;
-      if (user) {
-        // Ensure a profile exists so AppNavigator routes straight to MainTabs.
-        await setDoc(
-          doc(db, 'user_profiles', user.uid),
-          {
-            name: 'Dev User',
-            email: user.email || '',
-            profileVersion: 2,
-            age: 25,
-            dob: '',
-            gender: 'Prefer not to say',
-            height: 170,
-            weight: 70,
-            waist: null,
-            activityLevel: 'Moderately active',
-            diseases: ['None'],
-            medication: {
-              onMedication: 'No',
-              categories: [],
-              timingSensitivity: '',
-            },
-            diet: {
-              pattern: 'Non-vegetarian',
-              fastingHabits: 'No',
-              fastingType: '',
-            },
-            allergies: ['None'],
-            lifestyle: {
-              smoking: 'Never',
-              alcohol: 'Never',
-              sleepHours: 7,
-              stressLevel: 'Low',
-            },
-            dailyFoodBehavior: {
-              packagedFoodFrequency: 'Rare',
-            },
-            healthGoals: [],
-            bmi: 24.2,
-            dailyNutritionGoals: {
-              calories: 2200,
-              protein: 110,
-              carbs: 275,
-              fat: 70,
-              sugar: 25,
-              sodium: 2000,
-            },
-            customLimits: {
-              calories: 2200,
-              protein: 110,
-              carbs: 275,
-              fat: 70,
-              sugar: 25,
-              sodium: 2000,
-            },
-          },
-          { merge: true }
-        );
-      }
-    } catch (error: any) {
-      Alert.alert('Dev Bypass Failed', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -105,21 +27,22 @@ export default function LoginScreen({ navigation }: any) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-
-      const profileRef = doc(db, "user_profiles", user.uid);
-      const profileSnap = await getDoc(profileRef);
-
-      if (profileSnap.exists()) {
-        console.log("Profile found, ready for Home.");
-      } else {
-        console.log("No profile found, user needs Onboarding.");
+      if (user) {
+        navigation.navigate('Home');
       }
-
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSignIn = () => {
+    Alert.alert("Google Sign In", "Google sign-in will be implemented");
+  };
+
+  const handleAppleSignIn = () => {
+    Alert.alert("Apple Sign In", "Apple sign-in will be implemented");
   };
 
   const handleForgotPassword = () => {
@@ -156,59 +79,122 @@ export default function LoginScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.content}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Nutriwise</Text>
-          <Text style={styles.subtitle}>Smart Food Intelligence</Text>
-        </View>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Hero Section with Asymmetry */}
+          <View style={styles.heroSection}>
+            <View style={styles.brandContainer}>
+              <Text style={styles.brandTitle}>Nutriwise</Text>
+              <Text style={styles.brandSubtitle}>Nourish with intention</Text>
+            </View>
+            
+            {/* Asymmetrical decorative element */}
+            <View style={styles.accentCircle} />
+          </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="hello@example.com" 
-            placeholderTextColor={COLORS.textSecondary}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
+          {/* Login Form Card */}
+          <View style={styles.formCard}>
+            <Text style={styles.welcomeText}>Welcome back</Text>
+            <Text style={styles.welcomeSubtext}>Sign in to continue your wellness journey</Text>
+            
+            {/* Email Input */}
+            <View style={styles.inputContainer}>
+              <Ionicons name="mail-outline" size={20} color={COLORS.on_surface_variant} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email address"
+                placeholderTextColor={COLORS.on_surface_variant}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
 
-          <Text style={styles.label}>Password</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="••••••••" 
-            placeholderTextColor={COLORS.textSecondary}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+            {/* Password Input */}
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={20} color={COLORS.on_surface_variant} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={COLORS.on_surface_variant}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity 
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                  size={20} 
+                  color={COLORS.on_surface_variant} 
+                />
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-            <Text style={styles.buttonText}>{loading ? "Checking..." : "Enter"}</Text>
-          </TouchableOpacity>
+            {/* Forgot Password */}
+            <TouchableOpacity style={styles.forgotPassword} onPress={handleForgotPassword}>
+              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleForgotPassword}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </TouchableOpacity>
-          {__DEV__ && (
-            <TouchableOpacity
-              style={styles.devButton}
-              onPress={handleDevBypass}
+            {/* Primary Login Button */}
+            <TouchableOpacity 
+              style={styles.primaryButton}
+              onPress={handleLogin}
               disabled={loading}
             >
-              <Text style={styles.devButtonText}>{loading ? "Please wait..." : "Dev Mode Bypass"}</Text>
+              <LinearGradient
+                colors={[COLORS.primary, COLORS.primary_container]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.gradientButton}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {loading ? 'Signing in...' : 'Sign In'}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
-          )}
 
-          <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-            <Text style={styles.footerText}>
-              New here? <Text style={{color: COLORS.primary}}>Create Account</Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
+            {/* Divider */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>Or continue with</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Social Login Buttons */}
+            <View style={styles.socialButtonsContainer}>
+              <TouchableOpacity style={styles.socialButton} onPress={handleGoogleSignIn}>
+                <View style={styles.socialButtonContent}>
+                  <Ionicons name="logo-google" size={20} color={COLORS.on_surface} />
+                  <Text style={styles.socialButtonText}>Google</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.socialButton} onPress={handleAppleSignIn}>
+                <View style={styles.socialButtonContent}>
+                  <Ionicons name="logo-apple" size={20} color={COLORS.on_surface} />
+                  <Text style={styles.socialButtonText}>Apple</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Sign Up Link */}
+          <View style={styles.signUpContainer}>
+            <Text style={styles.signUpText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+              <Text style={styles.signUpLink}>Sign up</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -217,85 +203,192 @@ export default function LoginScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surface,
   },
-  content: {
+  keyboardView: {
     flex: 1,
-    padding: SPACING.l,
-    justifyContent: 'center',
   },
-  header: {
-    marginBottom: SPACING.xl * 1.5,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: SPACING.spacing_6, // 24px outer padding
+    paddingTop: SPACING.xxxl, // 64px top breathing room
   },
-  title: {
-    fontSize: 42,
-    fontWeight: 'bold',
+  
+  // Hero Section with Editorial Asymmetry
+  heroSection: {
+    marginBottom: SPACING.spacing_16, // 64px major separation
+    position: 'relative',
+  },
+  brandContainer: {
+    paddingTop: SPACING.xxl, // 48px
+    paddingBottom: SPACING.l, // 24px
+  },
+  brandTitle: {
+    fontFamily: FONTS.display,
+    fontSize: TYPOGRAPHY.display_lg, // 56px - editorial impact
+    fontWeight: FONTS.weight_bold,
     color: COLORS.primary,
-    letterSpacing: -1,
+    lineHeight: 64,
+    marginBottom: SPACING.s,
   },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+  brandSubtitle: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_lg, // 16px
+    color: COLORS.on_surface_variant,
+    fontWeight: FONTS.weight_regular,
   },
-  form: {
-    gap: SPACING.m,
+  accentCircle: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: COLORS.primary_container,
+    opacity: 0.1,
+    top: -20,
+    right: -30,
+    // Asymmetrical element breaking boundaries
   },
-  label: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    marginBottom: SPACING.xs,
-    fontWeight: '600',
+
+  // Form Card - Tonal Layering
+  formCard: {
+    backgroundColor: COLORS.surface_container_lowest, // White card
+    borderRadius: BORDER_RADIUS.xl, // 24px for major sections
+    padding: SPACING.xxl, // 48px
+    marginBottom: SPACING.xl,
+    ...ELEVATION.card,
+  },
+  welcomeText: {
+    fontFamily: FONTS.display,
+    fontSize: TYPOGRAPHY.headline_lg, // 32px
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.on_surface,
+    marginBottom: SPACING.s,
+  },
+  welcomeSubtext: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md, // 14px
+    color: COLORS.on_surface_variant,
+    marginBottom: SPACING.xxl, // 48px
+    lineHeight: 20,
+  },
+
+  // Floating Input Fields
+  inputContainer: {
+    backgroundColor: COLORS.surface_container_highest, // #E2E2E2
+    borderRadius: BORDER_RADIUS.lg, // 16px
+    paddingHorizontal: SPACING.m,
+    paddingVertical: SPACING.m,
+    marginBottom: SPACING.m,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 0,
   },
   input: {
-    backgroundColor: COLORS.surface,
-    padding: SPACING.m,
-    borderRadius: 12,
-    color: COLORS.textPrimary,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#333',
+    flex: 1,
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md, // 14px
+    color: COLORS.on_surface,
+    marginLeft: SPACING.s,
   },
-  button: {
-    backgroundColor: COLORS.primary,
-    padding: SPACING.m,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: SPACING.m,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+  inputIcon: {
+    marginRight: SPACING.s,
   },
-  buttonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
+  eyeIcon: {
+    padding: SPACING.xs,
   },
-  forgotText: {
+
+  // Forgot Password
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: SPACING.xl, // 24px
+  },
+  forgotPasswordText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_sm, // 12px
     color: COLORS.primary,
-    textAlign: 'center',
-    marginTop: SPACING.s,
-    fontSize: 14,
-    fontWeight: '500',
+    fontWeight: FONTS.weight_medium,
   },
-  devButton: {
-    borderWidth: 1,
-    borderColor: '#333',
-    backgroundColor: COLORS.surface,
-    padding: SPACING.m,
-    borderRadius: 12,
+
+  // Primary Button with Gradient
+  primaryButton: {
+    borderRadius: BORDER_RADIUS.xl, // 24px
+    marginBottom: SPACING.xl,
+    overflow: 'hidden',
+  },
+  gradientButton: {
+    paddingVertical: SPACING.m,
+    paddingHorizontal: SPACING.xl,
     alignItems: 'center',
   },
-  devButtonText: {
-    color: COLORS.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
+  primaryButtonText: {
+    fontFamily: FONTS.display,
+    fontSize: TYPOGRAPHY.body_lg, // 16px
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.on_primary,
   },
-  footerText: {
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: SPACING.m,
+
+  // Divider - No lines, using space and typography
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: SPACING.xl,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.outline_variant,
+    opacity: 0.3,
+  },
+  dividerText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.label_sm, // 11px
+    color: COLORS.on_surface_variant,
+    paddingHorizontal: SPACING.m,
+  },
+
+  // Social Buttons
+  socialButtonsContainer: {
+    flexDirection: 'row',
+    gap: SPACING.m,
+  },
+  socialButton: {
+    flex: 1,
+    backgroundColor: COLORS.surface_variant,
+    borderRadius: BORDER_RADIUS.lg, // 16px
+    paddingVertical: SPACING.m,
+    paddingHorizontal: SPACING.l,
+    borderWidth: 1,
+    borderColor: COLORS.ghost_border,
+  },
+  socialButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.s,
+  },
+  socialButtonText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md, // 14px
+    color: COLORS.on_surface,
+    fontWeight: FONTS.weight_medium,
+  },
+
+  // Sign Up Link
+  signUpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: SPACING.xxl,
+  },
+  signUpText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md, // 14px
+    color: COLORS.on_surface_variant,
+  },
+  signUpLink: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md, // 14px
+    color: COLORS.primary,
+    fontWeight: FONTS.weight_bold,
   },
 });

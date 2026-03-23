@@ -25,19 +25,21 @@ const Tab = createBottomTabNavigator();
 const ScanStack = createNativeStackNavigator();
 const RootStack = createNativeStackNavigator();
 
-// 0. CREATE THE DARK THEME
-// This fixes the white flash during transitions
-// 0. CREATE THE DARK THEME
+// 0. CREATE THE VITAL CURATOR THEME
+// This follows the new design system with tonal depth and editorial feel
 const AppTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: COLORS.background, // Global background
-    card: COLORS.background,       // <--- THIS FIXES THE FLASH (Sets stack card to dark)
-    text: COLORS.textPrimary,
-    border: '#333',
+    background: COLORS.surface, // Global background (#F9F9F9)
+    card: COLORS.surface,       // Sets stack card to surface color
+    text: COLORS.on_surface,    // Primary text color
+    border: COLORS.outline_variant, // Ghost borders
+    primary: COLORS.primary,     // Vital green
+    notification: COLORS.primary_container, // Fresh leaf green
   },
 };
+
 // 1. Scan Stack
 function ScanStackNavigator() {
   return (
@@ -57,12 +59,12 @@ function MainTabs() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: COLORS.surface,
-          borderTopColor: '#333',
+          borderTopColor: COLORS.outline_variant,
           height: 60,
           paddingBottom: 8,
         },
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
+        tabBarInactiveTintColor: COLORS.on_surface_variant,
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: any;
 
@@ -115,8 +117,8 @@ function RootNavigator({ initialRouteName }: { initialRouteName: string }) {
           animation: 'slide_from_right', 
           gestureEnabled: true,
           gestureDirection: 'horizontal',
-          headerStyle: { backgroundColor: COLORS.background }, 
-          headerTintColor: COLORS.textPrimary,
+          headerStyle: { backgroundColor: COLORS.surface }, 
+          headerTintColor: COLORS.on_surface,
           headerShadowVisible: false,
         }}
       />
@@ -158,7 +160,7 @@ export default function AppNavigator() {
 
   if (loading || (user && hasProfile === null)) {
     return (
-      <View style={{flex:1, backgroundColor: COLORS.background, justifyContent:'center', alignItems:'center'}}>
+      <View style={{flex:1, backgroundColor: COLORS.surface, justifyContent:'center', alignItems:'center'}}>
         <ActivityIndicator color={COLORS.primary} size="large" />
       </View>
     );

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseConfig';
 import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
-import { COLORS, SPACING, FONTS } from '../constants/theme';
+import { COLORS, SPACING, TYPOGRAPHY, FONTS, BORDER_RADIUS, ELEVATION } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { calculateDailyNutritionGoals, calculateBMI } from '../services/nutritionCalculator';
 
@@ -48,26 +48,178 @@ export default function ProfileScreen({ navigation }: any) {
   const [packagedFoodFrequency, setPackagedFoodFrequency] = useState<'Rare' | '1–2× weekly' | '3–5× weekly' | 'Daily' | ''>('');
   const [healthGoals, setHealthGoals] = useState<string[]>([]);
 
-  const diseaseOptions = ["Diabetes", "Hypertension", "Celiac", "None"];
+  // Options
+  const genderOptions = ['Male', 'Female', 'Other', 'Prefer not to say'];
+  const activityOptions = ['Sedentary', 'Lightly active', 'Moderately active', 'Very active'];
+  const diseaseOptions = ['None', 'Diabetes', 'Hypertension', 'Heart disease', 'Kidney disease', 'Liver disease', 'Thyroid', 'Arthritis', 'Asthma', 'Other'];
+  const allergyOptions = ['None', 'Nuts', 'Dairy', 'Gluten', 'Eggs', 'Soy', 'Fish', 'Shellfish', 'Other'];
+  const smokingOptions = ['Never', 'Former', 'Current'];
+  const alcoholOptions = ['Never', 'Occasionally', 'Weekly', 'Daily'];
+  const stressOptions = ['Low', 'Medium', 'High'];
+  const packagedFoodOptions = ['Rare', '1–2× weekly', '3–5× weekly', 'Daily'];
+  const healthGoalOptions = ['Maintain health', 'Fat loss', 'Muscle building', 'Stay fit', 'Reduce sugar intake', 'Reduce salt intake', 'Improve heart health', 'Improve digestion', 'Improve kidney health', 'Improve immunity'];
 
-  const genderOptions: Array<'Male' | 'Female' | 'Other' | 'Prefer not to say'> = ['Male', 'Female', 'Other', 'Prefer not to say'];
-  const activityOptions: Array<'Sedentary' | 'Lightly active' | 'Moderately active' | 'Very active'> = ['Sedentary', 'Lightly active', 'Moderately active', 'Very active'];
-  const yesNoOptions: Array<'Yes' | 'No'> = ['Yes', 'No'];
+  // Fetch Profile
+  const fetchProfile = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
 
-  const medCategoryOptions = ['Diabetes', 'Blood pressure', 'Thyroid', 'Steroids', 'Painkillers', 'Antibiotics', 'Other'];
-  const medTimingOptions: Array<'Before food' | 'After food' | 'Anytime'> = ['Before food', 'After food', 'Anytime'];
+      const userDoc = await getDoc(doc(db, "user_profiles", currentUser.uid));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setName(data.name || '');
+        setAge(data.age?.toString() || '');
+        setWeight(data.weight?.toString() || '');
+        setHeight(data.height?.toString() || '');
+        setWaist(data.waist?.toString() || '');
+        setDob(data.dob || '');
+        setGender(data.gender || '');
+        setActivityLevel(data.activityLevel || '');
+        setOnMedication(data.medication?.onMedication || '');
+        setMedCategories(data.medication?.categories || []);
+        setMedTiming(data.medication?.timingSensitivity || '');
+        setDietPattern(data.diet?.pattern || '');
+        setFastingHabit(data.diet?.fastingHabits || '');
+        setFastingType(data.diet?.fastingType || '');
+        setAllergies(data.allergies || []);
+        setSmoking(data.lifestyle?.smoking || '');
+        setAlcohol(data.lifestyle?.alcohol || '');
+        setSleepHours(data.lifestyle?.sleepHours?.toString() || '');
+        setStressLevel(data.lifestyle?.stressLevel || '');
+        setPackagedFoodFrequency(data.dailyFoodBehavior?.packagedFoodFrequency || '');
+        setHealthGoals(data.healthGoals || []);
+        setDiseases(data.diseases || []);
 
-  const dietPatternOptions: Array<'Vegetarian' | 'Eggetarian' | 'Non-vegetarian' | 'Vegan'> = ['Vegetarian', 'Eggetarian', 'Non-vegetarian', 'Vegan'];
-  const fastingTypeOptions: Array<'Intermittent fasting' | 'Religious fasting'> = ['Intermittent fasting', 'Religious fasting'];
+        // Calculate BMI
+        if (data.height && data.weight) {
+          const calculatedBMI = calculateBMI(data.weight, data.height);
+          setBmi(calculatedBMI);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const allergyOptions = ['Milk', 'Eggs', 'Peanuts', 'Tree nuts', 'Soy', 'Wheat/Gluten', 'Fish', 'Shellfish', 'Sesame', 'None'];
-  const smokingOptions: Array<'Never' | 'Former' | 'Current'> = ['Never', 'Former', 'Current'];
-  const alcoholOptions: Array<'Never' | 'Occasionally' | 'Weekly' | 'Daily'> = ['Never', 'Occasionally', 'Weekly', 'Daily'];
-  const stressOptions: Array<'Low' | 'Medium' | 'High'> = ['Low', 'Medium', 'High'];
-  const packagedFoodOptions: Array<'Rare' | '1–2× weekly' | '3–5× weekly' | 'Daily'> = ['Rare', '1–2× weekly', '3–5× weekly', 'Daily'];
-  const healthGoalOptions = ['Fat loss', 'Muscle building', 'Stay fit', 'Gain weight', 'Better digestion', 'Better sleep', 'Manage diabetes', 'Lower BP'];
+  // Save Profile
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
 
-  // 1. ADD PENCIL ICON TO HEADER FOR EDITING
+      const profileData = {
+        name,
+        age: parseInt(age) || 0,
+        weight: parseFloat(weight) || 0,
+        height: parseFloat(height) || 0,
+        waist: parseFloat(waist) || 0,
+        dob,
+        gender,
+        activityLevel,
+        medication: {
+          onMedication,
+          categories: medCategories,
+          timingSensitivity: medTiming,
+        },
+        diet: {
+          pattern: dietPattern,
+          fastingHabits: fastingHabit,
+          fastingType: fastingType,
+        },
+        allergies,
+        lifestyle: {
+          smoking,
+          alcohol,
+          sleepHours: parseFloat(sleepHours) || 0,
+          stressLevel,
+        },
+        dailyFoodBehavior: {
+          packagedFoodFrequency,
+        },
+        healthGoals,
+        diseases,
+        profileVersion: 2,
+      };
+
+      await updateDoc(doc(db, "user_profiles", currentUser.uid), profileData);
+      Alert.alert("Success", "Profile updated successfully!");
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      Alert.alert("Error", "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Toggle Multi-select
+  const toggleMultiSelect = (item: string, currentList: string[], setter: (list: string[]) => void, noneOption: string) => {
+    if (item === noneOption) {
+      setter(item === currentList[0] ? [] : [item]);
+    } else {
+      const newList = currentList.includes(item)
+        ? currentList.filter(i => i !== item)
+        : [...currentList.filter(i => i !== noneOption), item];
+      setter(newList);
+    }
+  };
+
+  // Toggle Disease (single select)
+  const toggleDisease = (disease: string) => {
+    setDiseases(disease === diseases[0] ? [] : [disease]);
+  };
+
+  // Delete Account
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+
+      // Reauthenticate
+      const credential = EmailAuthProvider.credential(currentUser.email!, passwordInput);
+      await reauthenticateWithCredential(currentUser, credential);
+
+      // Delete user data
+      const batch = writeBatch(db);
+      
+      // Delete profile
+      batch.delete(doc(db, "user_profiles", currentUser.uid));
+      
+      // Delete food logs
+      const foodLogsQuery = query(collection(db, 'users', currentUser.uid, 'food_logs'));
+      const foodLogsSnapshot = await getDocs(foodLogsQuery);
+      foodLogsSnapshot.forEach(doc => batch.delete(doc.ref));
+
+      // Delete daily summaries
+      const summariesQuery = query(collection(db, 'users', currentUser.uid, 'daily_summaries'));
+      const summariesSnapshot = await getDocs(summariesQuery);
+      summariesSnapshot.forEach(doc => batch.delete(doc.ref));
+
+      await batch.commit();
+
+      // Delete user
+      await currentUser.delete();
+      
+      Alert.alert("Success", "Account deleted successfully");
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      Alert.alert("Error", "Failed to delete account. Please check your password.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Logout
+  const handleLogout = () => {
+    auth.signOut();
+  };
+
+  // Header setup
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -79,7 +231,7 @@ export default function ProfileScreen({ navigation }: any) {
           <Ionicons 
             name={isEditing ? "checkmark" : "pencil"} 
             size={20} 
-            color={isEditing ? COLORS.primary : (saving ? COLORS.textSecondary : COLORS.primary)} 
+            color={isEditing ? COLORS.primary : (saving ? COLORS.on_surface_variant : COLORS.primary)} 
           />
         </TouchableOpacity>
       ),
@@ -90,568 +242,126 @@ export default function ProfileScreen({ navigation }: any) {
     fetchProfile();
   }, []);
 
-  const fetchProfile = async () => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const docRef = doc(db, "user_profiles", user.uid);
-      const snap = await getDoc(docRef);
-
-      if (snap.exists()) {
-        const data = snap.data();
-        console.log("✅ Profile data loaded:", data);
-        
-        setName(data.name);
-        setAge(data.age?.toString?.() ?? '');
-        setWeight(data.weight?.toString?.() ?? '');
-        setHeight(data.height?.toString?.() ?? '');
-        setDiseases(Array.isArray(data.diseases) ? data.diseases : ["None"]);
-        setBmi(data.bmi || 0);
-
-        setDob(data.dob || '');
-        setGender(data.gender || '');
-        setWaist(data.waist !== null && data.waist !== undefined ? String(data.waist) : '');
-        setActivityLevel(data.activityLevel || '');
-
-        setOnMedication(data?.medication?.onMedication || '');
-        setMedCategories(Array.isArray(data?.medication?.categories) ? data.medication.categories : []);
-        setMedTiming(data?.medication?.timingSensitivity || '');
-
-        setDietPattern(data?.diet?.pattern || '');
-        setFastingHabit(data?.diet?.fastingHabits || '');
-        setFastingType(data?.diet?.fastingType || '');
-
-        setAllergies(Array.isArray(data?.allergies) ? data.allergies : []);
-        setSmoking(data?.lifestyle?.smoking || '');
-        setAlcohol(data?.lifestyle?.alcohol || '');
-        setSleepHours(data?.lifestyle?.sleepHours !== null && data?.lifestyle?.sleepHours !== undefined ? String(data.lifestyle.sleepHours) : '');
-        setStressLevel(data?.lifestyle?.stressLevel || '');
-
-        setPackagedFoodFrequency(data?.dailyFoodBehavior?.packagedFoodFrequency || '');
-        setHealthGoals(Array.isArray(data?.healthGoals) ? data.healthGoals : []);
-      }
-    } catch (e) {
-      console.error("❌ Error fetching profile:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleDisease = (d: string) => {
-    if (!isEditing) return; 
-
-    if (d === "None") {
-      setDiseases(["None"]);
-    } else {
-      let newDiseases = diseases.filter(item => item !== "None");
-      if (newDiseases.includes(d)) {
-        newDiseases = newDiseases.filter(item => item !== d);
-      } else {
-        newDiseases.push(d);
-      }
-      setDiseases(newDiseases.length > 0 ? newDiseases : ["None"]);
-    }
-  };
-
-  const toggleMultiSelect = (
-    value: string,
-    current: string[],
-    setCurrent: React.Dispatch<React.SetStateAction<string[]>>,
-    noneValue = 'None'
-  ) => {
-    if (!isEditing) return;
-    if (value === noneValue) {
-      setCurrent([noneValue]);
-      return;
-    }
-
-    const withoutNone = current.filter((x) => x !== noneValue);
-    if (withoutNone.includes(value)) {
-      const next = withoutNone.filter((x) => x !== value);
-      setCurrent(next.length > 0 ? next : [noneValue]);
-    } else {
-      setCurrent([...withoutNone, value]);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const weightKg = parseFloat(weight);
-      const heightCm = parseFloat(height);
-      const ageYears = parseInt(age);
-
-      // Calculate BMI
-      const bmi = calculateBMI(weightKg, heightCm);
-
-      // Check if user has hypertension for sodium limit adjustment
-      const hasHypertension = diseases.includes("Hypertension");
-
-      // Recalculate daily nutrition goals based on updated stats
-      const nutritionGoals = calculateDailyNutritionGoals(
-        weightKg,
-        heightCm,
-        ageYears,
-        gender === 'Female' ? 'female' : 'male',
-        hasHypertension
-      );
-
-      await updateDoc(doc(db, "user_profiles", user.uid), {
-        name,
-        age: ageYears,
-        dob,
-        gender,
-        weight: weightKg,
-        height: heightCm,
-        waist: waist ? parseFloat(waist) : null,
-        activityLevel,
-        diseases,
-        medication: {
-          onMedication,
-          categories: onMedication === 'Yes' ? medCategories.filter((x) => x !== 'None') : [],
-          timingSensitivity: onMedication === 'Yes' ? medTiming : ''
-        },
-        diet: {
-          pattern: dietPattern,
-          fastingHabits: fastingHabit,
-          fastingType: fastingHabit === 'Yes' ? fastingType : ''
-        },
-        allergies: allergies.length > 0 ? allergies : ["None"],
-        lifestyle: {
-          smoking,
-          alcohol,
-          sleepHours: sleepHours ? parseFloat(sleepHours) : null,
-          stressLevel
-        },
-        dailyFoodBehavior: {
-          packagedFoodFrequency,
-        },
-        healthGoals,
-        bmi,
-        // Update calculated daily goals and macro limits
-        dailyNutritionGoals: {
-          calories: nutritionGoals.calories,
-          protein: nutritionGoals.protein,
-          carbs: nutritionGoals.carbs,
-          fat: nutritionGoals.fat,
-          sugar: nutritionGoals.sugar,
-          sodium: nutritionGoals.sodium,
-        },
-        customLimits: {
-          calories: nutritionGoals.calories,
-          protein: nutritionGoals.protein,
-          carbs: nutritionGoals.carbs,
-          fat: nutritionGoals.fat,
-          sugar: nutritionGoals.sugar,
-          sodium: nutritionGoals.sodium,
-        }
-      });
-      
-      setIsEditing(false);
-      Alert.alert("Success", `Profile updated!\n\nDaily Goals:\n• Calories: ${nutritionGoals.calories}\n• Protein: ${nutritionGoals.protein}g\n• Carbs: ${nutritionGoals.carbs}g\n• Fat: ${nutritionGoals.fat}g`);
-    } catch (e) {
-      Alert.alert("Error", "Could not save profile.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await auth.signOut();
-  };
-
-  const handleDeleteAccount = async () => {
-    if (deleteConfirmation !== 'Delete') {
-      Alert.alert('Error', 'Please type "Delete" exactly to confirm.');
-      return;
-    }
-
-    if (!passwordInput) {
-      Alert.alert('Error', 'Please enter your password to confirm deletion.');
-      return;
-    }
-
-    setDeleting(true);
-    try {
-      const user = auth.currentUser;
-      if (!user || !user.email) return;
-
-      // Reauthenticate user
-      const credential = EmailAuthProvider.credential(user.email, passwordInput);
-      await reauthenticateWithCredential(user, credential);
-
-      const batch = writeBatch(db);
-      const uid = user.uid;
-
-      // Delete user profile
-      const profileRef = doc(db, 'user_profiles', uid);
-      batch.delete(profileRef);
-
-      // Delete all food logs
-      const foodLogsQuery = query(collection(db, 'users', uid, 'food_logs'));
-      const foodLogsSnap = await getDocs(foodLogsQuery);
-      foodLogsSnap.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-
-      // Delete all daily summaries
-      const summariesQuery = query(collection(db, 'users', uid, 'daily_summaries'));
-      const summariesSnap = await getDocs(summariesQuery);
-      summariesSnap.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-
-      await batch.commit();
-
-      // Delete user authentication
-      await user.delete();
-
-      setDeleteModalVisible(false);
-      setDeleteConfirmation('');
-      setPasswordInput('');
-      
-    } catch (error: any) {
-      console.error('Delete account error:', error);
-      if (error.code === 'auth/wrong-password') {
-        Alert.alert('Error', 'Incorrect password. Please try again.');
-      } else if (error.code === 'auth/requires-recent-login') {
-        Alert.alert('Error', 'Please log out and log back in, then try deleting your account again.');
-      } else {
-        Alert.alert('Error', 'Could not delete account. Please try again.');
-      }
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  if (loading) return <View style={styles.center}><ActivityIndicator color={COLORS.primary}/></View>;
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}> 
-      {/* NOTE: We removed 'top' edge so content flows under the header nicely */}
-      
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Avatar / Name Placeholder */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatar}>
-             <Text style={styles.avatarText}>{name ? name.charAt(0).toUpperCase() : "U"}</Text>
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Profile Header */}
+        <View style={styles.profileHeader}>
+          <View style={styles.avatarSection}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{name ? name.charAt(0).toUpperCase() : "U"}</Text>
+            </View>
+            {isEditing ? (
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                style={[styles.nameInput, styles.inputEditable]}
+                placeholder="Enter your name"
+                placeholderTextColor={COLORS.on_surface_variant}
+              />
+            ) : (
+              <Text style={styles.profileName}>{name}</Text>
+            )}
+            <Text style={styles.profileEmail}>{auth.currentUser?.email}</Text>
           </View>
-          {isEditing ? (
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              style={[styles.nameInput, styles.inputEditable]}
-              placeholder="Enter your name"
-              placeholderTextColor={COLORS.textSecondary}
-            />
-          ) : (
-            <Text style={styles.name}>{name}</Text>
-          )}
-          <Text style={styles.email}>{auth.currentUser?.email}</Text>
         </View>
 
-        {/* Stats Grid */}
+        {/* Personal Information */}
         <View style={styles.section}>
-          <Text style={styles.label}>Physical Stats</Text>
-          <View style={styles.row}>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Age</Text>
-              <TextInput 
-                value={age} 
-                onChangeText={setAge} 
-                editable={isEditing} 
-                style={[styles.input, isEditing && styles.inputEditable]} 
+          <Text style={styles.sectionTitle}>Personal Information</Text>
+          
+          <View style={styles.infoGrid}>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Age</Text>
+              <TextInput
+                value={age}
+                onChangeText={setAge}
+                editable={isEditing}
+                style={[styles.infoValue, isEditing && styles.inputEditable]}
+                placeholder="Age"
+                placeholderTextColor={COLORS.on_surface_variant}
                 keyboardType="numeric"
               />
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Weight (kg)</Text>
-              <TextInput 
-                value={weight} 
-                onChangeText={setWeight} 
-                editable={isEditing} 
-                style={[styles.input, isEditing && styles.inputEditable]} 
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Gender</Text>
+              <View style={styles.chipContainer}>
+                {genderOptions.map((g) => (
+                  <TouchableOpacity
+                    key={g}
+                    style={[styles.chip, gender === g && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => isEditing && setGender(g as any)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, gender === g && styles.chipTextActive]}>{g}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Height (cm)</Text>
+              <TextInput
+                value={height}
+                onChangeText={setHeight}
+                editable={isEditing}
+                style={[styles.infoValue, isEditing && styles.inputEditable]}
+                placeholder="Height"
+                placeholderTextColor={COLORS.on_surface_variant}
                 keyboardType="numeric"
               />
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Height (cm)</Text>
-              <TextInput 
-                value={height} 
-                onChangeText={setHeight} 
-                editable={isEditing} 
-                style={[styles.input, isEditing && styles.inputEditable]} 
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Weight (kg)</Text>
+              <TextInput
+                value={weight}
+                onChangeText={setWeight}
+                editable={isEditing}
+                style={[styles.infoValue, isEditing && styles.inputEditable]}
+                placeholder="Weight"
+                placeholderTextColor={COLORS.on_surface_variant}
                 keyboardType="numeric"
               />
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>BMI</Text>
+              <Text style={styles.infoValue}>{bmi.toFixed(1)}</Text>
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Activity Level</Text>
+              <View style={styles.chipContainer}>
+                {activityOptions.map((a) => (
+                  <TouchableOpacity
+                    key={a}
+                    style={[styles.chip, activityLevel === a && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => isEditing && setActivityLevel(a as any)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, activityLevel === a && styles.chipTextActive]}>{a}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
         </View>
 
+        {/* Health Conditions */}
         <View style={styles.section}>
-          <Text style={styles.label}>Identity</Text>
-          <Text style={styles.statLabel}>Date of Birth</Text>
-          <TextInput
-            value={dob}
-            onChangeText={setDob}
-            editable={isEditing}
-            style={[styles.input, { textAlign: 'left' }, isEditing && styles.inputEditable]}
-            placeholder="DD/MM/YYYY"
-            placeholderTextColor={COLORS.textSecondary}
-          />
-
-          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Gender</Text>
-          <View style={styles.chipContainer}>
-            {genderOptions.map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={[styles.chip, gender === g && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setGender(g)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, gender === g && styles.chipTextActive]}>{g}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Body Metrics</Text>
-          <Text style={styles.statLabel}>Waist (cm)</Text>
-          <TextInput
-            value={waist}
-            onChangeText={setWaist}
-            editable={isEditing}
-            style={[styles.input, { textAlign: 'left' }, isEditing && styles.inputEditable]}
-            keyboardType="numeric"
-            placeholder="e.g. 80"
-            placeholderTextColor={COLORS.textSecondary}
-          />
-
-          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Activity level</Text>
-          <View style={styles.chipContainer}>
-            {activityOptions.map((a) => (
-              <TouchableOpacity
-                key={a}
-                style={[styles.chip, activityLevel === a && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setActivityLevel(a)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, activityLevel === a && styles.chipTextActive]}>{a}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Medication</Text>
-          <Text style={styles.statLabel}>On medication?</Text>
-          <View style={styles.chipContainer}>
-            {yesNoOptions.map((v) => (
-              <TouchableOpacity
-                key={v}
-                style={[styles.chip, onMedication === v && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setOnMedication(v)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, onMedication === v && styles.chipTextActive]}>{v}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {onMedication === 'Yes' && (
-            <>
-              <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Medication categories</Text>
-              <View style={styles.chipContainer}>
-                {medCategoryOptions.map((m) => (
-                  <TouchableOpacity
-                    key={m}
-                    style={[styles.chip, medCategories.includes(m) && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                    onPress={() => toggleMultiSelect(m, medCategories, setMedCategories)}
-                    disabled={!isEditing}
-                  >
-                    <Text style={[styles.chipText, medCategories.includes(m) && styles.chipTextActive]}>{m}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Timing sensitivity</Text>
-              <View style={styles.chipContainer}>
-                {medTimingOptions.map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[styles.chip, medTiming === t && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                    onPress={() => isEditing && setMedTiming(t)}
-                    disabled={!isEditing}
-                  >
-                    <Text style={[styles.chipText, medTiming === t && styles.chipTextActive]}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Diet</Text>
-          <Text style={styles.statLabel}>Diet pattern</Text>
-          <View style={styles.chipContainer}>
-            {dietPatternOptions.map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[styles.chip, dietPattern === p && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setDietPattern(p)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, dietPattern === p && styles.chipTextActive]}>{p}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Do you do fasting?</Text>
-          <View style={styles.chipContainer}>
-            {yesNoOptions.map((v) => (
-              <TouchableOpacity
-                key={v}
-                style={[styles.chip, fastingHabit === v && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setFastingHabit(v)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, fastingHabit === v && styles.chipTextActive]}>{v}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {fastingHabit === 'Yes' && (
-            <>
-              <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Fasting type</Text>
-              <View style={styles.chipContainer}>
-                {fastingTypeOptions.map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[styles.chip, fastingType === t && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                    onPress={() => isEditing && setFastingType(t)}
-                    disabled={!isEditing}
-                  >
-                    <Text style={[styles.chipText, fastingType === t && styles.chipTextActive]}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Allergies</Text>
-          <View style={styles.chipContainer}>
-            {allergyOptions.map((a) => (
-              <TouchableOpacity
-                key={a}
-                style={[styles.chip, allergies.includes(a) && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => toggleMultiSelect(a, allergies, setAllergies)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, allergies.includes(a) && styles.chipTextActive]}>{a}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Lifestyle</Text>
-          <Text style={styles.statLabel}>Smoking</Text>
-          <View style={styles.chipContainer}>
-            {smokingOptions.map((s) => (
-              <TouchableOpacity
-                key={s}
-                style={[styles.chip, smoking === s && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setSmoking(s)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, smoking === s && styles.chipTextActive]}>{s}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Alcohol</Text>
-          <View style={styles.chipContainer}>
-            {alcoholOptions.map((a) => (
-              <TouchableOpacity
-                key={a}
-                style={[styles.chip, alcohol === a && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setAlcohol(a)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, alcohol === a && styles.chipTextActive]}>{a}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Average sleep duration (hours)</Text>
-          <TextInput
-            value={sleepHours}
-            onChangeText={setSleepHours}
-            editable={isEditing}
-            style={[styles.input, { textAlign: 'left' }, isEditing && styles.inputEditable]}
-            keyboardType="numeric"
-            placeholder="e.g. 7"
-            placeholderTextColor={COLORS.textSecondary}
-          />
-
-          <Text style={[styles.statLabel, { marginTop: SPACING.m }]}>Stress level</Text>
-          <View style={styles.chipContainer}>
-            {stressOptions.map((st) => (
-              <TouchableOpacity
-                key={st}
-                style={[styles.chip, stressLevel === st && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setStressLevel(st)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, stressLevel === st && styles.chipTextActive]}>{st}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Food Behavior</Text>
-          <Text style={styles.statLabel}>Packaged food frequency</Text>
-          <View style={styles.chipContainer}>
-            {packagedFoodOptions.map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[styles.chip, packagedFoodFrequency === p && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => isEditing && setPackagedFoodFrequency(p)}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, packagedFoodFrequency === p && styles.chipTextActive]}>{p}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Health Goals</Text>
-          <View style={styles.chipContainer}>
-            {healthGoalOptions.map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={[styles.chip, healthGoals.includes(g) && styles.chipActive, !isEditing && { opacity: 0.8 }]}
-                onPress={() => toggleMultiSelect(g, healthGoals, setHealthGoals, '__none__')}
-                disabled={!isEditing}
-              >
-                <Text style={[styles.chipText, healthGoals.includes(g) && styles.chipTextActive]}>{g}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Diseases Section */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Health Conditions</Text>
+          <Text style={styles.sectionTitle}>Health Conditions</Text>
           <View style={styles.chipContainer}>
             {diseaseOptions.map(d => (
               <TouchableOpacity 
@@ -661,7 +371,7 @@ export default function ProfileScreen({ navigation }: any) {
                   diseases.includes(d) && styles.chipActive,
                   !isEditing && { opacity: 0.8 }
                 ]}
-                onPress={() => toggleDisease(d)}
+                onPress={() => isEditing && toggleDisease(d)}
                 disabled={!isEditing}
               >
                 <Text style={[
@@ -673,73 +383,163 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* Logout Button */}
-        <TouchableOpacity 
-          style={styles.logoutBtn}
-          onPress={handleLogout}
-        >
-          <Text style={styles.logoutBtnText}>Log Out</Text>
-        </TouchableOpacity>
+        {/* Diet & Lifestyle */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Diet & Lifestyle</Text>
+          
+          <View style={styles.infoGrid}>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Diet Pattern</Text>
+              <View style={styles.chipContainer}>
+                {['Vegetarian', 'Eggetarian', 'Non-vegetarian', 'Vegan'].map((d) => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.chip, dietPattern === d && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => isEditing && setDietPattern(d as any)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, dietPattern === d && styles.chipTextActive]}>{d}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
-        {/* Delete Account Button */}
-        <TouchableOpacity 
-          style={styles.deleteBtn}
-          onPress={() => setDeleteModalVisible(true)}
-        >
-          <Text style={styles.deleteBtnText}>Delete My Account</Text>
-        </TouchableOpacity>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Smoking</Text>
+              <View style={styles.chipContainer}>
+                {smokingOptions.map((s) => (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.chip, smoking === s && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => isEditing && setSmoking(s as any)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, smoking === s && styles.chipTextActive]}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Alcohol</Text>
+              <View style={styles.chipContainer}>
+                {alcoholOptions.map((a) => (
+                  <TouchableOpacity
+                    key={a}
+                    style={[styles.chip, alcohol === a && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => isEditing && setAlcohol(a as any)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, alcohol === a && styles.chipTextActive]}>{a}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Sleep Hours</Text>
+              <TextInput
+                value={sleepHours}
+                onChangeText={setSleepHours}
+                editable={isEditing}
+                style={[styles.infoValue, isEditing && styles.inputEditable]}
+                placeholder="Hours"
+                placeholderTextColor={COLORS.on_surface_variant}
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Stress Level</Text>
+              <View style={styles.chipContainer}>
+                {stressOptions.map((s) => (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.chip, stressLevel === s && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                    onPress={() => isEditing && setStressLevel(s as any)}
+                    disabled={!isEditing}
+                  >
+                    <Text style={[styles.chipText, stressLevel === s && styles.chipTextActive]}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Health Goals */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Health Goals</Text>
+          <View style={styles.chipContainer}>
+            {healthGoalOptions.map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.chip, healthGoals.includes(g) && styles.chipActive, !isEditing && { opacity: 0.8 }]}
+                onPress={() => isEditing && toggleMultiSelect(g, healthGoals, setHealthGoals, '__none__')}
+                disabled={!isEditing}
+              >
+                <Text style={[styles.chipText, healthGoals.includes(g) && styles.chipTextActive]}>{g}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Actions */}
+        <View style={styles.actionsSection}>
+          <TouchableOpacity 
+            style={styles.logoutButton}
+            onPress={handleLogout}
+          >
+            <Ionicons name="log-out-outline" size={20} color={COLORS.on_surface} />
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.deleteButton}
+            onPress={() => setDeleteModalVisible(true)}
+          >
+            <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+            <Text style={styles.deleteText}>Delete Account</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ height: SPACING.xxl }} />
       </ScrollView>
 
-      {/* Delete Account Confirmation Modal */}
+      {/* Delete Account Modal */}
       <Modal visible={deleteModalVisible} transparent animationType="fade">
-        <View style={styles.modalBg}>
+        <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Ionicons name="warning" size={32} color={COLORS.danger} />
+              <Ionicons name="warning" size={32} color={COLORS.error} />
               <Text style={styles.modalTitle}>Delete Account?</Text>
             </View>
             
             <Text style={styles.modalWarning}>
-              This action cannot be undone. All your data including:
-            </Text>
-            
-            <View style={styles.warningList}>
-              <Text style={styles.warningItem}>• Profile information</Text>
-              <Text style={styles.warningItem}>• Food history</Text>
-              <Text style={styles.warningItem}>• Daily summaries</Text>
-              <Text style={styles.warningItem}>• Account access</Text>
-            </View>
-            
-            <Text style={styles.modalInstruction}>
-              Type "Delete" below to confirm:
+              This action cannot be undone. All your data will be permanently deleted.
             </Text>
             
             <TextInput 
               style={styles.confirmInput}
               value={deleteConfirmation}
               onChangeText={setDeleteConfirmation}
-              placeholder="Type Delete"
-              placeholderTextColor={COLORS.textSecondary}
+              placeholder="Type 'DELETE' to confirm"
+              placeholderTextColor={COLORS.on_surface_variant}
               autoFocus
             />
 
-            <Text style={styles.modalInstruction}>
-              Enter your password to confirm:
-            </Text>
-            
             <TextInput 
               style={styles.confirmInput}
               value={passwordInput}
               onChangeText={setPasswordInput}
-              placeholder="Password"
-              placeholderTextColor={COLORS.textSecondary}
+              placeholder="Enter your password"
+              placeholderTextColor={COLORS.on_surface_variant}
               secureTextEntry
             />
 
-            <View style={styles.modalBtns}>
+            <View style={styles.modalButtons}>
               <TouchableOpacity 
-                style={styles.cancelModalBtn} 
+                style={styles.cancelButton} 
                 onPress={() => {
                   setDeleteModalVisible(false);
                   setDeleteConfirmation('');
@@ -747,18 +547,18 @@ export default function ProfileScreen({ navigation }: any) {
                 }}
                 disabled={deleting}
               >
-                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[
-                  styles.confirmModalBtn, 
-                  deleteConfirmation === 'Delete' && passwordInput ? styles.confirmModalBtnActive : styles.confirmModalBtnDisabled
+                  styles.confirmButton, 
+                  deleteConfirmation === 'DELETE' && passwordInput ? styles.confirmButtonActive : styles.confirmButtonDisabled
                 ]}
                 onPress={handleDeleteAccount}
-                disabled={deleting || deleteConfirmation !== 'Delete' || !passwordInput}
+                disabled={deleting || deleteConfirmation !== 'DELETE' || !passwordInput}
               >
-                <Text style={styles.confirmModalBtnText}>
-                  {deleting ? "Deleting..." : "Delete Account"}
+                <Text style={styles.confirmButtonText}>
+                  {deleting ? "Deleting..." : "Delete"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -770,160 +570,244 @@ export default function ProfileScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  center: { flex: 1, backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' },
-  scroll: { padding: SPACING.l },
-  
-  avatarSection: { alignItems: 'center', marginBottom: SPACING.xl, marginTop: SPACING.m },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.s, borderWidth: 1, borderColor: COLORS.primary },
-  avatarText: { fontSize: 32, color: COLORS.primary, fontWeight: 'bold' },
-  name: { fontSize: 20, color: COLORS.textPrimary, fontWeight: 'bold' },
-  nameInput: { fontSize: 20, color: COLORS.textPrimary, fontWeight: 'bold', textAlign: 'center', padding: SPACING.s, borderRadius: 12, backgroundColor: COLORS.surface },
-  email: { color: COLORS.textSecondary },
-
-  section: { marginBottom: SPACING.xl },
-  label: { color: COLORS.textSecondary, marginBottom: SPACING.m, textTransform: 'uppercase', fontSize: 12, letterSpacing: 1 },
-  
-  row: { flexDirection: 'row', gap: SPACING.m },
-  statBox: { flex: 1 },
-  statLabel: { color: COLORS.textSecondary, fontSize: 12, marginBottom: 4 },
-  input: { backgroundColor: COLORS.surface, color: COLORS.textPrimary, padding: SPACING.m, borderRadius: 12, fontSize: 16, textAlign: 'center' },
-  inputEditable: { borderWidth: 1, borderColor: COLORS.primary, backgroundColor: '#1A1A1A' },
-
-  chipContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#333', backgroundColor: COLORS.surface },
-  chipActive: { backgroundColor: COLORS.secondary, borderColor: COLORS.secondary },
-  chipText: { color: COLORS.textSecondary },
-  chipTextActive: { color: '#000', fontWeight: 'bold' },
-
-  actionBtn: { padding: SPACING.m, borderRadius: 12, alignItems: 'center', marginTop: SPACING.s },
-  btnText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
-
-  // Logout Button
-  logoutBtn: { 
-    padding: SPACING.m, 
-    borderRadius: 12, 
-    alignItems: 'center', 
-    marginTop: SPACING.l,
-    backgroundColor: 'rgba(255, 204, 0, 0.1)',
-    borderWidth: 1,
-    borderColor: COLORS.primary
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
   },
-  logoutBtnText: { 
-    color: COLORS.primary, 
-    fontWeight: 'bold', 
-    fontSize: 16 
-  },
-
-  // Delete Account Button
-  deleteBtn: { 
-    padding: SPACING.m, 
-    borderRadius: 12, 
-    alignItems: 'center', 
-    marginTop: SPACING.l,
-    backgroundColor: 'rgba(255, 107, 107, 0.1)',
-    borderWidth: 1,
-    borderColor: COLORS.danger
-  },
-  deleteBtnText: { 
-    color: COLORS.danger, 
-    fontWeight: 'bold', 
-    fontSize: 16 
-  },
-
-  // Delete Modal Styles
-  modalBg: { 
-    flex: 1, 
-    backgroundColor: 'rgba(0,0,0,0.8)', 
-    justifyContent: 'center', 
+  center: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SPACING.l
   },
-  modalCard: { 
-    width: '100%', 
-    maxWidth: 400,
-    backgroundColor: COLORS.surface, 
-    borderRadius: 16, 
-    padding: SPACING.xl,
+  scroll: {
+    flex: 1,
+    paddingHorizontal: SPACING.spacing_6,
+  },
+
+  // Profile Header
+  profileHeader: {
+    alignItems: 'center',
+    paddingTop: SPACING.l,
+    paddingBottom: SPACING.xl,
+  },
+  avatarSection: {
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primary_container,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.m,
+  },
+  avatarText: {
+    fontFamily: FONTS.display,
+    fontSize: 32,
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.primary,
+  },
+  nameInput: {
+    fontFamily: FONTS.display,
+    fontSize: TYPOGRAPHY.headline_md,
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.on_surface,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.m,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  profileName: {
+    fontFamily: FONTS.display,
+    fontSize: TYPOGRAPHY.headline_md,
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.on_surface,
+    marginBottom: SPACING.xs,
+  },
+  profileEmail: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md,
+    color: COLORS.on_surface_variant,
+  },
+
+  // Sections
+  section: {
+    marginBottom: SPACING.xxl,
+  },
+  sectionTitle: {
+    fontFamily: FONTS.display,
+    fontSize: TYPOGRAPHY.headline_sm,
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.on_surface,
+    marginBottom: SPACING.l,
+  },
+
+  // Info Grid
+  infoGrid: {
+    gap: SPACING.l,
+  },
+  infoItem: {
+    gap: SPACING.s,
+  },
+  infoLabel: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_sm,
+    color: COLORS.on_surface_variant,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  infoValue: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md,
+    color: COLORS.on_surface,
+    paddingVertical: SPACING.s,
+  },
+  inputEditable: {
+    backgroundColor: COLORS.surface_container_low,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.m,
+  },
+
+  // Chips
+  chipContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.s,
+  },
+  chip: {
+    paddingHorizontal: SPACING.m,
+    paddingVertical: SPACING.s,
+    borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: COLORS.surface_container_low,
     borderWidth: 1,
-    borderColor: '#333'
+    borderColor: COLORS.outline_variant,
+  },
+  chipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_sm,
+    color: COLORS.on_surface_variant,
+  },
+  chipTextActive: {
+    color: COLORS.on_primary,
+    fontWeight: FONTS.weight_medium,
+  },
+
+  // Actions
+  actionsSection: {
+    gap: SPACING.m,
+    marginTop: SPACING.xxl,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.s,
+    paddingVertical: SPACING.m,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.surface_container_low,
+  },
+  logoutText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md,
+    fontWeight: FONTS.weight_medium,
+    color: COLORS.on_surface,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.s,
+    paddingVertical: SPACING.m,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.error_container,
+  },
+  deleteText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md,
+    fontWeight: FONTS.weight_medium,
+    color: COLORS.error,
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.l,
+  },
+  modalCard: {
+    backgroundColor: COLORS.surface_container_lowest,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xxl,
+    width: '100%',
+    maxWidth: 400,
   },
   modalHeader: {
     alignItems: 'center',
-    marginBottom: SPACING.m
+    marginBottom: SPACING.l,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-    marginTop: SPACING.s
+    fontFamily: FONTS.display,
+    fontSize: TYPOGRAPHY.headline_md,
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.on_surface,
+    marginTop: SPACING.m,
   },
   modalWarning: {
-    fontSize: 14,
-    color: COLORS.textPrimary,
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md,
+    color: COLORS.on_surface_variant,
     textAlign: 'center',
-    marginBottom: SPACING.m
-  },
-  warningList: {
-    backgroundColor: 'rgba(255, 107, 107, 0.1)',
-    padding: SPACING.m,
-    borderRadius: 8,
-    marginBottom: SPACING.m
-  },
-  warningItem: {
-    fontSize: 13,
-    color: COLORS.textPrimary,
-    marginBottom: 2
-  },
-  modalInstruction: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginBottom: SPACING.s
+    marginBottom: SPACING.l,
   },
   confirmInput: {
-    backgroundColor: COLORS.background,
-    color: COLORS.textPrimary,
+    backgroundColor: COLORS.surface_container_low,
+    color: COLORS.on_surface,
     padding: SPACING.m,
-    borderRadius: 8,
-    fontSize: 16,
-    textAlign: 'center',
-    borderWidth: 1,
-    borderColor: '#333',
-    marginBottom: SPACING.l
+    borderRadius: BORDER_RADIUS.md,
+    fontSize: TYPOGRAPHY.body_md,
+    marginBottom: SPACING.m,
   },
-  modalBtns: { 
-    flexDirection: 'row', 
-    gap: SPACING.m 
+  modalButtons: {
+    flexDirection: 'row',
+    gap: SPACING.m,
   },
-  cancelModalBtn: {
+  cancelButton: {
     flex: 1,
-    padding: SPACING.m,
-    borderRadius: 8,
-    backgroundColor: '#333',
-    alignItems: 'center'
+    paddingVertical: SPACING.m,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surface_container_low,
+    alignItems: 'center',
   },
-  cancelModalBtnText: {
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    fontWeight: '600'
+  cancelButtonText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md,
+    fontWeight: FONTS.weight_medium,
+    color: COLORS.on_surface,
   },
-  confirmModalBtn: {
+  confirmButton: {
     flex: 1,
-    padding: SPACING.m,
-    borderRadius: 8,
-    alignItems: 'center'
+    paddingVertical: SPACING.m,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
   },
-  confirmModalBtnActive: {
-    backgroundColor: COLORS.danger
+  confirmButtonActive: {
+    backgroundColor: COLORS.error,
   },
-  confirmModalBtnDisabled: {
-    backgroundColor: '#333',
-    opacity: 0.5
+  confirmButtonDisabled: {
+    backgroundColor: COLORS.surface_container_highest,
+    opacity: 0.5,
   },
-  confirmModalBtnText: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: 'bold'
-  }
+  confirmButtonText: {
+    fontFamily: FONTS.body,
+    fontSize: TYPOGRAPHY.body_md,
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.on_primary,
+  },
 });

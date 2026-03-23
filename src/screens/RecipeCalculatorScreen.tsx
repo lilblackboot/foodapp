@@ -258,7 +258,7 @@ export default function RecipeCalculatorScreen({ navigation }: any) {
             <TextInput
               style={styles.recipeNameInput}
               placeholder="Enter recipe name"
-              placeholderTextColor={COLORS.textSecondary}
+              placeholderTextColor={COLORS.on_surface_variant}
               value={recipeName}
               onChangeText={setRecipeName}
             />
@@ -291,14 +291,14 @@ export default function RecipeCalculatorScreen({ navigation }: any) {
             <TextInput
               style={styles.ingredientInput}
               placeholder="Ingredient name"
-              placeholderTextColor={COLORS.textSecondary}
+              placeholderTextColor={COLORS.on_surface_variant}
               value={currentIngredient}
               onChangeText={handleIngredientChange}
             />
             <TextInput
               style={styles.amountInput}
               placeholder="Amount"
-              placeholderTextColor={COLORS.textSecondary}
+              placeholderTextColor={COLORS.on_surface_variant}
               keyboardType="decimal-pad"
               value={currentAmount}
               onChangeText={setCurrentAmount}
@@ -394,7 +394,7 @@ export default function RecipeCalculatorScreen({ navigation }: any) {
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => removeIngredient(ing.id)}>
-                  <MaterialIcons name="delete" size={20} color={COLORS.danger} />
+                  <MaterialIcons name="delete" size={20} color={COLORS.error} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -479,7 +479,7 @@ export default function RecipeCalculatorScreen({ navigation }: any) {
             {/* Failed Ingredients Warning */}
             {nutrition.failedIngredients.length > 0 && (
               <View style={styles.warningBox}>
-                <MaterialIcons name="warning" size={20} color={COLORS.warning} />
+                <MaterialIcons name="warning" size={20} color={COLORS.risk_medium} />
                 <Text style={styles.warningText}>
                   Could not find: {nutrition.failedIngredients.join(', ')}
                 </Text>
@@ -503,7 +503,7 @@ export default function RecipeCalculatorScreen({ navigation }: any) {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Save Recipe</Text>
               <TouchableOpacity onPress={() => setShowSaveModal(false)}>
-                <MaterialIcons name="close" size={24} color={COLORS.textPrimary} />
+                <MaterialIcons name="close" size={24} color={COLORS.on_surface} />
               </TouchableOpacity>
             </View>
 
@@ -512,7 +512,7 @@ export default function RecipeCalculatorScreen({ navigation }: any) {
               <TextInput
                 style={styles.modalInput}
                 placeholder="Enter recipe name"
-                placeholderTextColor={COLORS.textSecondary}
+                placeholderTextColor={COLORS.on_surface_variant}
                 value={saveModalRecipeName}
                 onChangeText={setSaveModalRecipeName}
               />
@@ -547,7 +547,7 @@ export default function RecipeCalculatorScreen({ navigation }: any) {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Load Recipe</Text>
               <TouchableOpacity onPress={() => setShowLoadModal(false)}>
-                <MaterialIcons name="close" size={24} color={COLORS.textPrimary} />
+                <MaterialIcons name="close" size={24} color={COLORS.on_surface} />
               </TouchableOpacity>
             </View>
 
@@ -599,7 +599,7 @@ export default function RecipeCalculatorScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: COLORS.surface },
   scroll: { padding: SPACING.l },
   
   header: { 
@@ -608,10 +608,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginBottom: SPACING.xl 
   },
-  title: { color: COLORS.textPrimary, fontSize: 24, fontWeight: 'bold' },
+  title: { color: COLORS.on_surface, fontSize: 24, fontWeight: 'bold' },
   
   section: { marginBottom: SPACING.xl },
-  sectionTitle: { color: COLORS.textPrimary, fontSize: 18, fontWeight: 'bold', marginBottom: SPACING.m },
+  sectionTitle: { color: COLORS.on_surface, fontSize: 18, fontWeight: 'bold', marginBottom: SPACING.m },
   
   recipeNameRow: {
     flexDirection: 'row',
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
   recipeNameInput: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    color: COLORS.textPrimary,
+    color: COLORS.on_surface,
     padding: SPACING.m,
     borderRadius: 12,
     borderWidth: 1,
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
   ingredientInput: { 
     flex: 1,
     backgroundColor: COLORS.surface, 
-    color: COLORS.textPrimary, 
+    color: COLORS.on_surface, 
     padding: SPACING.m, 
     borderRadius: 12,
     borderWidth: 1,
@@ -671,7 +671,7 @@ const styles = StyleSheet.create({
   amountInput: { 
     width: 80,
     backgroundColor: COLORS.surface, 
-    color: COLORS.textPrimary, 
+    color: COLORS.on_surface, 
     padding: SPACING.m, 
     borderRadius: 12,
     textAlign: 'center',
@@ -704,7 +704,7 @@ const styles = StyleSheet.create({
     height: 50
   },
   unitDropdownText: {
-    color: COLORS.textPrimary,
+    color: COLORS.on_surface,
     fontWeight: 'bold',
     fontSize: 14,
     marginRight: 4
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#222'
   },
   unitDropdownItemText: {
-    color: COLORS.textPrimary,
+    color: COLORS.on_surface,
     fontSize: 13
   },
   
@@ -758,8 +758,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primary
   },
-  ingredientName: { color: COLORS.textPrimary, fontWeight: 'bold', marginBottom: 4 },
-  ingredientAmount: { color: COLORS.textSecondary, fontSize: 12 },
+  ingredientName: { color: COLORS.on_surface, fontWeight: 'bold', marginBottom: 4 },
+  ingredientAmount: { color: COLORS.on_surface_variant, fontSize: 12 },
   
   servingsInput: {
     flexDirection: 'row',
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
   servingsValue: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    color: COLORS.textPrimary,
+    color: COLORS.on_surface,
     padding: SPACING.m,
     borderRadius: 8,
     textAlign: 'center',
@@ -819,7 +819,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   nutritionValue: { color: COLORS.primary, fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  nutritionLabel: { color: COLORS.textSecondary, fontSize: 11 },
+  nutritionLabel: { color: COLORS.on_surface_variant, fontSize: 11 },
   
   logBtn: {
     backgroundColor: COLORS.secondary,
@@ -838,9 +838,9 @@ const styles = StyleSheet.create({
     padding: SPACING.m,
     borderRadius: 8,
     borderLeftWidth: 3,
-    borderLeftColor: COLORS.warning
+    borderLeftColor: COLORS.risk_medium
   },
-  warningText: { color: COLORS.textSecondary, flex: 1 },
+  warningText: { color: COLORS.on_surface_variant, flex: 1 },
 
   // Modal styles
   modalOverlay: {
@@ -864,7 +864,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#333'
   },
   modalTitle: {
-    color: COLORS.textPrimary,
+    color: COLORS.on_surface,
     fontSize: 20,
     fontWeight: 'bold'
   },
@@ -873,14 +873,14 @@ const styles = StyleSheet.create({
     gap: SPACING.m
   },
   modalLabel: {
-    color: COLORS.textPrimary,
+    color: COLORS.on_surface,
     fontSize: 16,
     fontWeight: '600',
     marginBottom: SPACING.s
   },
   modalInput: {
-    backgroundColor: COLORS.background,
-    color: COLORS.textPrimary,
+    backgroundColor: COLORS.surface,
+    color: COLORS.on_surface,
     padding: SPACING.m,
     borderRadius: 12,
     borderWidth: 1,
@@ -901,18 +901,18 @@ const styles = StyleSheet.create({
   },
   modalCancelBtn: {
     borderWidth: 1,
-    borderColor: COLORS.textSecondary,
+    borderColor: COLORS.on_surface_variant,
     padding: SPACING.l,
     borderRadius: 12,
     alignItems: 'center'
   },
   modalCancelText: {
-    color: COLORS.textSecondary,
+    color: COLORS.on_surface_variant,
     fontWeight: 'bold',
     fontSize: 16
   },
   emptyText: {
-    color: COLORS.textSecondary,
+    color: COLORS.on_surface_variant,
     textAlign: 'center',
     marginVertical: SPACING.xl,
     fontSize: 16
@@ -921,7 +921,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surface,
     padding: SPACING.m,
     borderRadius: 12,
     marginBottom: SPACING.m,
@@ -932,13 +932,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   recipeName: {
-    color: COLORS.textPrimary,
+    color: COLORS.on_surface,
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: SPACING.s
   },
   recipeStats: {
-    color: COLORS.textSecondary,
+    color: COLORS.on_surface_variant,
     fontSize: 12,
     marginBottom: SPACING.s
   },
@@ -959,7 +959,7 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   deleteBtn: {
-    backgroundColor: COLORS.danger,
+    backgroundColor: COLORS.error,
     padding: SPACING.m,
     borderRadius: 8,
     justifyContent: 'center',
