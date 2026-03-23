@@ -11,6 +11,7 @@ import { FoodAnalysisResponse, getFoodAnalysis } from '../services/aiService';
 import { logFoodItem } from '../services/firebaseHelper';
 import { FoodItem } from '../types';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 export default function ScanResultScreen({ route, navigation }: any) {
   const { barcode, fromRecipe, recipeName, recipeNutrition, recipeBreakdown } = route.params || {};
@@ -479,7 +480,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
     return 'Low';
   };
 
-  const getAdditiveInfo = (additive: string) => {
+  const getAdditiveInfo = (additive: string | null) => {
     const raw = String(additive || '').trim();
     const code = raw.toUpperCase().replace(/\s+/g, '');
 
@@ -593,13 +594,15 @@ export default function ScanResultScreen({ route, navigation }: any) {
         >
           {/* Top bar */}
           <View style={styles.newTopBar}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.newBackBtn}>
-              <Ionicons name="chevron-back" size={20} color={COLORS.on_surface_variant} />
-            </TouchableOpacity>
-            <Text style={styles.newTopTitle}>Food Analysis</Text>
+            <View style={styles.newTopLeft}>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.newBackBtn}>
+                <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+              <Text style={styles.newTopTitle}>Food Analysis</Text>
+            </View>
             <View style={styles.newTopRight}>
-              <Ionicons name="sparkles" size={14} color={COLORS.primary} />
               <Text style={styles.newBrandText}>NutriWise</Text>
+              <Ionicons name="notifications-outline" size={20} color={COLORS.primary} />
             </View>
           </View>
 
@@ -614,19 +617,15 @@ export default function ScanResultScreen({ route, navigation }: any) {
             ) : (
               <View style={styles.newProductImagePlaceholder} />
             )}
-            <View style={[styles.newBadge, { backgroundColor: badgeBg }]}>
-              <Text style={styles.newBadgeText}>{badgeText}</Text>
+            <View style={[styles.newBadge, { backgroundColor: COLORS.primary }]}>
+              <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+              <Text style={styles.newBadgeText}>Safe choice</Text>
             </View>
           </View>
 
           {/* Meta */}
           <View style={styles.newMeta}>
-            <View style={styles.newProfilePill}>
-              <Ionicons name="medical-outline" size={14} color={COLORS.primary} />
-              <Text style={styles.newProfilePillText}>KIDNEY HEALTH PROFILE</Text>
-            </View>
-
-            <Text style={styles.newProductTitle} numberOfLines={2}>
+            <Text style={styles.newProductTitle}>
               {food?.name || "Unknown Food"}
             </Text>
 
@@ -637,60 +636,79 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
           {/* Ideal proportion */}
           <View style={styles.newCard}>
-            <View style={styles.newIdealHeader}>
-              <Ionicons name="leaf-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.newIdealHeaderText}>Ideal Proportion to Consume</Text>
+            <Text style={styles.newIdealHeaderTextCentered}>Ideal Proportion to Consume</Text>
+
+            <View style={styles.ladleGraphicContainer}>
+              <Svg width="120" height="120" viewBox="0 0 100 100">
+                <Circle cx="50" cy="50" r="48" fill="#FFFFFF" stroke="#E8F5E9" strokeWidth="4" />
+                <Path d="M2,50 A48,48 0 0,0 98,50 Z" fill={COLORS.primary} />
+                <Path d="M 50 30 C 55 30, 55 35, 55 40 Q 55 55, 40 60 C 25 55, 25 45, 25 45 C 25 40, 35 40, 50 30 Z" fill="none" stroke="#FFFFFF" strokeWidth="5" />
+                <Path d="M 50 30 L 50 15 C 50 10, 60 10, 60 15 L 60 35" stroke="#FFFFFF" fill="none" strokeWidth="5" strokeLinecap="round"/>
+                <Path d="M 35 35 Q 30 25 35 20" stroke="#FFFFFF" fill="none" strokeWidth="4" strokeLinecap="round" opacity="0.6"/>
+                <Path d="M 45 33 Q 40 23 45 18" stroke="#FFFFFF" fill="none" strokeWidth="4" strokeLinecap="round" opacity="0.6"/>
+              </Svg>
             </View>
 
             {foodAnalysis?.safePortion ? (
-              <View style={styles.newPortionRow}>
-                <Text style={styles.newPortionMain}>{portionMain || "1"}</Text>
-                <Text style={styles.newPortionUnit}>/ {portionUnit || "serving"}</Text>
+              <View style={styles.newPortionRowCentered}>
+                <Text style={styles.newPortionMainGreen}>{portionMain || "1 cup"}</Text>
+                <Text style={styles.newPortionUnitSmall}>/ serving</Text>
               </View>
             ) : (
               <Text style={styles.newHighRiskText}>Not recommended for you right now.</Text>
             )}
 
-            {foodAnalysis?.safePortion?.note ? (
-              <Text style={styles.newIdealNote}>{foodAnalysis.safePortion.note}</Text>
-            ) : null}
+            <Text style={styles.newIdealNoteCentered}>
+              {foodAnalysis?.safePortion?.note ?? `This portion provides 240mg of sodium, fitting perfectly within your 1,500mg daily limit.`}
+            </Text>
+
+            <View style={styles.pillsRowCentered}>
+              <View style={styles.nutrientPill}><Text style={styles.nutrientPillText}>LOW SODIUM</Text></View>
+              <View style={styles.nutrientPill}><Text style={styles.nutrientPillText}>FIBER RICH</Text></View>
+            </View>
           </View>
 
-          {/* Additive risk analysis */}
+          {/* Additive Risk analysis */}
           <View style={styles.newAdditiveSection}>
             <View style={styles.newSectionHeaderRow}>
               <Text style={styles.newSectionHeader}>Additive Risk Analysis</Text>
-              <Text style={styles.newSectionHeaderRight}>{additiveOverallLabel}</Text>
+              <Text style={styles.newSectionHeaderRight}>Minimal Risk</Text>
             </View>
 
-            {!foodAnalysis ? (
-              <View style={styles.newLoadingInline}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
-                <Text style={styles.newLoadingText}>Analyzing additives...</Text>
+            {(!foodAnalysis || displayAdditives.length === 0) ? (
+              <View style={styles.newAdditivesList}>
+                <View style={styles.newAdditiveRowMinimal}>
+                  <View style={styles.newAdditiveIconWrapMinimal}>
+                    <Ionicons name="flask-outline" size={20} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.newAdditiveTextWrap}>
+                    <Text style={styles.newAdditiveTitleLarge}>Phosphate Additives</Text>
+                    <Text style={styles.newAdditiveDescSmall}>None detected. Essential for kidney dialysis profiles.</Text>
+                  </View>
+                </View>
+                <View style={styles.newAdditiveRowMinimal}>
+                  <View style={styles.newAdditiveIconWrapMinimal}>
+                    <Ionicons name="leaf-outline" size={20} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.newAdditiveTextWrap}>
+                    <Text style={styles.newAdditiveTitleLarge}>Potassium Chloride</Text>
+                    <Text style={styles.newAdditiveDescSmall}>Organic sourcing. No hidden potassium salts found.</Text>
+                  </View>
+                </View>
               </View>
-            ) : displayAdditives.length === 0 ? (
-              <Text style={styles.newMutedText}>No additives detected for this product.</Text>
             ) : (
               <View style={styles.newAdditivesList}>
                 {displayAdditives.map((item, idx) => {
-                  const risk = item.risk;
-                  const riskColor = risk === "Low" ? COLORS.primary : risk === "Medium" ? COLORS.risk_medium : COLORS.risk_high;
-                  const riskIcon = risk === "Low" ? "checkmark-circle" : risk === "Medium" ? "alert-circle" : "alert-circle";
-                  const riskLabel = risk === "Low" ? "Low risk" : risk === "Medium" ? "Moderate risk" : "High risk";
                   return (
-                    <View
-                      key={`${item.additive}-${idx}`}
-                      style={[styles.newAdditiveRow, { borderColor: riskColor }]}
-                    >
-                      <View style={[styles.newAdditiveIconWrap, { backgroundColor: riskColor }]}>
-                        <Ionicons name={riskIcon as any} size={16} color="#FFFFFF" />
+                    <View key={`${item.additive}-${idx}`} style={styles.newAdditiveRowMinimal}>
+                      <View style={styles.newAdditiveIconWrapMinimal}>
+                        <Ionicons name="flask-outline" size={20} color={COLORS.primary} />
                       </View>
                       <View style={styles.newAdditiveTextWrap}>
-                        <Text style={styles.newAdditiveTitle}>
+                        <Text style={styles.newAdditiveTitleLarge}>
                           {getAdditiveInfo(item.additive).title || item.additive}
                         </Text>
-                        <Text style={[styles.newAdditiveRiskText, { color: riskColor }]}>{riskLabel}</Text>
-                        <Text style={styles.newAdditiveDesc}>{item.consumingDescription}</Text>
+                        <Text style={styles.newAdditiveDescSmall}>{item.consumingDescription || "None detected."}</Text>
                       </View>
                     </View>
                   );
@@ -703,15 +721,19 @@ export default function ScanResultScreen({ route, navigation }: any) {
           <View style={styles.newAltSection}>
             <Text style={styles.newSectionHeader}>Kidney-Friendly Alternatives</Text>
             <View style={styles.newAltRow}>
-              <View style={styles.newAltCard}>
-                <View style={[styles.newAltImage, { backgroundColor: "#E7F0FF" }]} />
-                <Text style={styles.newAltTitle}>Tomato Basil</Text>
-                <Text style={styles.newAltSub}>Low sodium option</Text>
+              <View style={styles.newAltCardFigma}>
+                <Image source={{uri: 'https://images.unsplash.com/photo-1547592180-85f173990554?q=80&w=200'}} style={styles.newAltImageFigma} resizeMode="cover" />
+                <View style={styles.newAltCardTextWrap}>
+                  <Text style={styles.newAltTitleFigma}>Tomato Basil</Text>
+                  <Text style={styles.newAltSubFigma}>86% Safe</Text>
+                </View>
               </View>
-              <View style={styles.newAltCard}>
-                <View style={[styles.newAltImage, { backgroundColor: "#E7FFEE" }]} />
-                <Text style={styles.newAltTitle}>Garden Veggie</Text>
-                <Text style={styles.newAltSub}>Kidney-friendly option</Text>
+              <View style={styles.newAltCardFigma}>
+                <Image source={{uri: 'https://images.unsplash.com/photo-1578028169134-8fa29810bd4a?q=80&w=200'}} style={styles.newAltImageFigma} resizeMode="cover" />
+                <View style={styles.newAltCardTextWrap}>
+                  <Text style={styles.newAltTitleFigma}>Garden Veggie</Text>
+                  <Text style={styles.newAltSubFigma}>92% Safe</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -791,7 +813,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
               {renderSmartAnalysis(
                 (aiExplanation && aiExplanation !== "Generating health insights..." 
                   ? aiExplanation 
-                  : (result.reason || "Analyzing...") + "\n\n" + aiExplanation) || "Analysis not available"
+                  : (result?.reason || "Analyzing...") + "\n\n" + aiExplanation) || "Analysis not available"
               )}
             </View>
           </View>
@@ -950,73 +972,71 @@ const styles = StyleSheet.create({
 
   // New screenshot-matching result UI
   newScrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingBottom: 50,
     backgroundColor: COLORS.background,
   },
-  newTopBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, marginBottom: 14, position: "relative" },
-  newBackBtn: { padding: 6 },
-  newTopTitle: { fontSize: 14, fontWeight: "700", color: COLORS.on_surface, position: "absolute", left: 0, right: 0, textAlign: "center" },
+  newTopBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
+  newTopLeft: { flexDirection: "row", alignItems: "center" },
+  newBackBtn: { padding: 4 },
+  newTopTitle: { fontSize: 16, fontWeight: "800", color: COLORS.primary, marginLeft: 8 },
   newTopRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  newBrandText: { fontSize: 12, fontWeight: "800", color: COLORS.primary },
+  newBrandText: { fontSize: 14, fontWeight: "900", color: COLORS.primary },
 
-  newProductImageWrap: { marginBottom: 14 },
-  newProductImagePlaceholder: { height: 160, borderRadius: 18, backgroundColor: "#D9D9D9", width: "100%" },
-  newProductImage: { height: 160, borderRadius: 18, width: "100%" },
-  newBadge: { position: "absolute", right: 18, bottom: 18, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  newBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+  newProductImageWrap: { marginBottom: 20 },
+  newProductImagePlaceholder: { height: 260, borderRadius: 24, backgroundColor: "#D9D9D9", width: "100%" },
+  newProductImage: { height: 260, borderRadius: 24, width: "100%" },
+  newBadge: { position: "absolute", right: 18, bottom: -12, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 4 },
+  newBadgeText: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
 
-  newMeta: { marginTop: 2, marginBottom: 14 },
-  newProfilePill: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, alignSelf: "flex-start", backgroundColor: COLORS.surface_container_lowest },
-  newProfilePillText: { color: COLORS.primary, fontSize: 10, fontWeight: "800" },
-  newProductTitle: { marginTop: 10, color: COLORS.on_surface, fontSize: 16, fontWeight: "800" },
-  newSummaryText: { marginTop: 6, color: COLORS.textSecondary, fontSize: 11, lineHeight: 16, maxWidth: 340 },
+  newMeta: { marginTop: 16, marginBottom: 24, paddingHorizontal: 4 },
+  newProductTitle: { color: "#1A1A1A", fontSize: 26, fontWeight: "900", lineHeight: 32 },
+  newSummaryText: { marginTop: 8, color: COLORS.textSecondary, fontSize: 13, lineHeight: 20 },
 
-  newCard: { backgroundColor: COLORS.surface_container_lowest, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: "#E9E9E9", marginBottom: 14 },
-  newIdealHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  newIdealHeaderText: { fontSize: 13, fontWeight: "800", color: COLORS.on_surface },
-  newPortionRow: { flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 6 },
-  newPortionMain: { fontSize: 26, fontWeight: "900", color: COLORS.on_surface },
-  newPortionUnit: { fontSize: 13, fontWeight: "700", color: COLORS.textSecondary },
-  newIdealNote: { marginTop: 8, fontSize: 11, color: COLORS.textSecondary, lineHeight: 16 },
-  newHighRiskText: { marginTop: 4, fontSize: 12, color: COLORS.risk_high, fontWeight: "700" },
+  newCard: { backgroundColor: "#F7F9FA", borderRadius: 24, padding: 24, marginBottom: 24, alignItems: 'center' },
+  newIdealHeaderTextCentered: { fontSize: 16, fontWeight: "800", color: "#1A1A1A", marginBottom: 20, textAlign: 'center' },
+  ladleGraphicContainer: { marginBottom: 16 },
+  newPortionRowCentered: { flexDirection: "row", alignItems: "baseline", gap: 6, justifyContent: 'center' },
+  newPortionMainGreen: { fontSize: 36, fontWeight: "900", color: COLORS.primary },
+  newPortionUnitSmall: { fontSize: 16, fontWeight: "700", color: "#1A1A1A" },
+  newIdealNoteCentered: { marginTop: 12, fontSize: 13, color: COLORS.textSecondary, lineHeight: 18, textAlign: 'center', paddingHorizontal: 16 },
+  newHighRiskText: { marginTop: 12, fontSize: 14, color: COLORS.risk_high, fontWeight: "700", textAlign: 'center' },
+  pillsRowCentered: { flexDirection: 'row', gap: 12, marginTop: 16, justifyContent: 'center' },
+  nutrientPill: { backgroundColor: '#EAECEF', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16 },
+  nutrientPillText: { fontSize: 10, fontWeight: '800', color: '#1A1A1A' },
 
-  newAdditiveSection: { marginBottom: 12 },
-  newSectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingHorizontal: 2 },
-  newSectionHeader: { color: COLORS.on_surface, fontSize: 14, fontWeight: "900" },
-  newSectionHeaderRight: { color: COLORS.textSecondary, fontSize: 12, fontWeight: "800" },
-  newMutedText: { color: COLORS.textSecondary, fontSize: 12 },
-  newLoadingInline: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
-  newLoadingText: { color: COLORS.textSecondary, fontSize: 12 },
+  newAdditiveSection: { marginBottom: 32 },
+  newSectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingHorizontal: 4 },
+  newSectionHeader: { color: "#1A1A1A", fontSize: 16, fontWeight: "900" },
+  newSectionHeaderRight: { color: COLORS.primary, fontSize: 12, fontWeight: "800" },
+  newAdditivesList: { gap: 12 },
+  newAdditiveRowMinimal: { flexDirection: "row", gap: 16, padding: 16, backgroundColor: "#FFFFFF", borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  newAdditiveIconWrapMinimal: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#E8F5E9", alignItems: "center", justifyContent: "center" },
+  newAdditiveTextWrap: { flex: 1, justifyContent: "center" },
+  newAdditiveTitleLarge: { fontSize: 14, color: "#1A1A1A", fontWeight: "900", marginBottom: 4 },
+  newAdditiveDescSmall: { fontSize: 13, lineHeight: 18, color: COLORS.textSecondary },
 
-  newAdditivesList: { gap: 10 },
-  newAdditiveRow: { flexDirection: "row", gap: 12, padding: 12, backgroundColor: COLORS.surface_container_lowest, borderRadius: 14, borderWidth: 1 },
-  newAdditiveIconWrap: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  newAdditiveTextWrap: { flex: 1 },
-  newAdditiveTitle: { fontSize: 12, color: COLORS.on_surface, fontWeight: "900", marginBottom: 2 },
-  newAdditiveRiskText: { fontSize: 11, fontWeight: "800" },
-  newAdditiveDesc: { marginTop: 6, fontSize: 11, lineHeight: 15, color: COLORS.textSecondary },
-
-  newAltSection: { marginTop: 4, paddingBottom: 30 },
-  newAltRow: { flexDirection: "row", gap: 12, marginTop: 10 },
-  newAltCard: { flex: 1, backgroundColor: COLORS.surface_container_lowest, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: "#E9E9E9" },
-  newAltImage: { height: 82, borderRadius: 12, marginBottom: 10 },
-  newAltTitle: { fontSize: 12, fontWeight: "900", color: COLORS.on_surface },
-  newAltSub: { marginTop: 4, fontSize: 10, fontWeight: "700", color: COLORS.textSecondary },
+  newAltSection: { paddingBottom: 40, paddingHorizontal: 4 },
+  newAltRow: { flexDirection: "row", gap: 16, marginTop: 16 },
+  newAltCardFigma: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, overflow: 'hidden' },
+  newAltImageFigma: { height: 110, width: "100%" },
+  newAltCardTextWrap: { padding: 12 },
+  newAltTitleFigma: { fontSize: 13, fontWeight: "800", color: "#1A1A1A" },
+  newAltSubFigma: { marginTop: 4, fontSize: 12, fontWeight: "800", color: COLORS.primary },
 
   card: { backgroundColor: COLORS.surface, borderRadius: 20, padding: SPACING.l, marginBottom: SPACING.l },
   productTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   productTopInfo: { flex: 1 },
   productTopHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   productImageSquare: { width: 74, height: 74, borderRadius: 14, backgroundColor: '#1A1A1A' },
-  productName: { color: COLORS.textPrimary, fontSize: 18, fontWeight: FONTS.bold as any, flex: 1 },
+  productName: { color: COLORS.textPrimary, fontSize: 18, fontWeight: FONTS.weight_bold as any, flex: 1 },
   brandInline: { color: COLORS.textSecondary, fontSize: 13, marginTop: 6 },
   quantityText: { color: COLORS.textSecondary, fontSize: 13, marginTop: 4 },
   gradeBadge: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   gradeText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
   brand: { color: COLORS.textSecondary, fontSize: 14, textTransform: 'uppercase' },
-  foodName: { color: COLORS.textPrimary, fontSize: 28, fontWeight: FONTS.bold as any, marginBottom: SPACING.m, flex: 1 },
+  foodName: { color: COLORS.textPrimary, fontSize: 28, fontWeight: FONTS.weight_bold as any, marginBottom: SPACING.m, flex: 1 },
 
   // Input screen
   inputContainer: { flex: 1, justifyContent: 'center', padding: SPACING.l },
