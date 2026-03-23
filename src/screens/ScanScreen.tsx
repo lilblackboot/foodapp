@@ -5,7 +5,7 @@ import {
   TextInput, FlatList, Modal, ScrollView, ActivityIndicator, Image 
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { COLORS, SPACING } from '../constants/theme';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, ELEVATION } from '../constants/theme';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { 
@@ -541,33 +541,48 @@ const OCRScanner = ({ onPhotoCaptured, isProcessing }: any) => {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center' },
   message: { textAlign: 'center', paddingBottom: 10, color: 'white' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'space-between', alignItems: 'center' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'space-between', alignItems: 'center' },
   topContent: { paddingTop: 60, alignItems: 'center' },
-  hintText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  hintText: { 
+    fontFamily: FONTS.display,
+    color: 'white', 
+    fontSize: 24, 
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   
   // Create a transparent hole in the middle
   scannerFrame: {
-    width: 250,
-    height: 250,
-    borderWidth: 2,
+    width: 280,
+    height: 280,
+    borderWidth: 3,
     borderColor: COLORS.primary,
     backgroundColor: 'transparent',
-    borderRadius: 20,
+    borderRadius: BORDER_RADIUS.xxl, // 32
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
   },
   
-  bottomContent: { paddingBottom: 50, gap: 15 },
+  bottomContent: { paddingBottom: 60, gap: 15 },
   optionButton: { 
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: BORDER_RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.primary
+    borderColor: 'rgba(255,255,255,0.3)'
   },
-  optionText: { color: COLORS.primary, fontSize: 16, fontWeight: '600' },
+  optionText: { 
+    fontFamily: FONTS.body,
+    color: '#FFFFFF', 
+    fontSize: 16, 
+    fontWeight: '700' 
+  },
   manualButton: { padding: 10 },
   manualText: { color: COLORS.primary, fontSize: 16, textDecorationLine: 'underline' },
   
@@ -575,35 +590,40 @@ const styles = StyleSheet.create({
   searchButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.primary
+    gap: 12,
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: BORDER_RADIUS.xl,
+    ...ELEVATION.floating,
   },
-  searchButtonText: { color: COLORS.primary, fontSize: 14, fontWeight: '600' },
+  searchButtonText: { 
+    fontFamily: FONTS.body,
+    color: COLORS.on_surface, 
+    fontSize: 15, 
+    fontWeight: '700' 
+  },
   
   // Modal Styles
   modalContainer: { 
     flex: 1, 
-    backgroundColor: COLORS.background 
+    backgroundColor: COLORS.surface 
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.l,
-    paddingVertical: SPACING.m,
+    paddingVertical: SPACING.l,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface
+    borderBottomColor: COLORS.outline_variant
   },
   modalTitle: { 
-    color: COLORS.textPrimary, 
-    fontSize: 18, 
-    fontWeight: 'bold' 
+    fontFamily: FONTS.display,
+    color: COLORS.on_surface, 
+    fontSize: 20, 
+    fontWeight: '800' 
   },
   
   // Search Input
@@ -612,13 +632,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     margin: SPACING.l,
     paddingHorizontal: SPACING.m,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    backgroundColor: COLORS.surface_container_highest,
+    borderRadius: BORDER_RADIUS.xl,
     gap: SPACING.s
   },
   searchInput: {
     flex: 1,
-    color: COLORS.textPrimary,
+    fontFamily: FONTS.body,
+    color: COLORS.on_surface,
     fontSize: 16,
     paddingVertical: SPACING.m
   },
@@ -636,29 +657,29 @@ const styles = StyleSheet.create({
   searchResultItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
     paddingVertical: SPACING.m,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)'
+    borderBottomColor: COLORS.outline_variant
   },
   productThumb: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)'
+    width: 56,
+    height: 56,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surface_container_highest,
   },
   productInfo: { flex: 1 },
   productName: { 
-    color: COLORS.textPrimary, 
+    fontFamily: FONTS.body,
+    color: COLORS.on_surface, 
     fontSize: 16, 
-    fontWeight: '600' 
+    fontWeight: '700' 
   },
   productBrand: { 
-    color: COLORS.textSecondary, 
+    fontFamily: FONTS.body,
+    color: COLORS.on_surface_variant, 
     fontSize: 14,
-    marginTop: 2
+    marginTop: 4
   },
   
   // Empty State
