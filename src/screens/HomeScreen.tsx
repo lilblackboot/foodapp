@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   },
   scoreText: {
     fontFamily: FONTS.display,
-    fontSize: 32,
+    fontSize: 25,
     fontWeight: '800',
     color: '#FFFFFF',
   },
