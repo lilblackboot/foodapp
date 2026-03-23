@@ -12,7 +12,9 @@ import { getHistory, getFoodsByDate, deleteFoodItem } from '../services/firebase
 import { DailySummary, FoodItem } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DAY_CELL_WIDTH = (SCREEN_WIDTH - SPACING.l * 2) / 7;
+// Subtract horizontal padding (SPACING.l * 2) and account for 7 x 1px cell borders
+const CALENDAR_WIDTH = SCREEN_WIDTH - SPACING.l * 2;
+const DAY_CELL_WIDTH = Math.floor(CALENDAR_WIDTH / 7);
 
 // ─────────────────────────────────────────────
 // Types
@@ -121,17 +123,6 @@ function MonthView({ entryMap }: { entryMap: Map<string, number> }) {
         })}
       </View>
 
-      {/* Legend */}
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <Text style={styles.dashText}>—</Text>
-          <Text style={styles.legendText}>No entries</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={styles.entryLine} />
-          <Text style={styles.legendText}>= 1 food entry</Text>
-        </View>
-      </View>
     </ScrollView>
   );
 }
@@ -430,7 +421,7 @@ const styles = StyleSheet.create({
   weekDayLabel: {
     width: DAY_CELL_WIDTH,
     textAlign: 'center',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: COLORS.textSecondary,
   },
@@ -444,11 +435,11 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     width: DAY_CELL_WIDTH,
-    minHeight: 64,
+    minHeight: 80,
     justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderWidth: 0.5,
     borderColor: '#EBEBEB',
     backgroundColor: '#FAFAFA',
@@ -457,10 +448,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 110, 28, 0.06)',
   },
   dayCellNumber: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: COLORS.textPrimary,
-    marginBottom: 4,
+    marginBottom: 5,
   },
   todayCellNumber: {
     color: COLORS.primary,
@@ -472,32 +463,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   linesContainer: {
-    width: '70%',
-    gap: 3,
+    width: '72%',
+    gap: 4,
     alignItems: 'stretch',
   },
   entryLine: {
-    height: 3,
+    height: 4,
     borderRadius: 2,
     backgroundColor: COLORS.primary,
-  },
-  legend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
-    marginTop: SPACING.l,
-    paddingVertical: SPACING.m,
-    backgroundColor: 'rgba(0, 110, 28, 0.05)',
-    borderRadius: 12,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  legendText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
   },
 });
