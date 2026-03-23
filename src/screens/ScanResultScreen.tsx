@@ -570,7 +570,15 @@ export default function ScanResultScreen({ route, navigation }: any) {
   const portionMain = (portionMainRaw || "").trim().replace(/\s+/g, "");
   const portionUnit = (portionUnitRaw || "serving").trim();
 
-  const displayAdditives = foodAnalysis?.additiveRiskAnalysis ?? [];
+  const displayAdditives = [...(foodAnalysis?.additiveRiskAnalysis ?? [])].sort((a, b) => {
+    const riskMap: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
+    return (riskMap[b.risk] || 0) - (riskMap[a.risk] || 0);
+  });
+
+  const displayNutrients = [...(foodAnalysis?.nutritionalRiskAnalysis ?? [])].sort((a, b) => {
+    const riskMap: Record<string, number> = { High: 3, Adequate: 2, Low: 1 };
+    return (riskMap[b.risk] || 0) - (riskMap[a.risk] || 0);
+  });
 
   if (true) {
     if (analysisFailed) {
@@ -712,6 +720,48 @@ export default function ScanResultScreen({ route, navigation }: any) {
                       <View style={styles.newAdditiveTextWrap}>
                         <Text style={styles.newAdditiveTitle}>
                           {getAdditiveInfo(item.additive).title || item.additive}
+                        </Text>
+                        <Text style={[styles.newAdditiveRiskText, { color: riskColor }]}>{riskLabel}</Text>
+                        <Text style={styles.newAdditiveDesc}>{item.consumingDescription}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {/* Nutritional Risk Analysis */}
+          <View style={styles.newAdditiveSection}>
+            <View style={styles.newSectionHeaderRow}>
+              <Text style={styles.newSectionHeader}>Nutritional Risk Analysis</Text>
+            </View>
+
+            {!foodAnalysis ? (
+              <View style={styles.newLoadingInline}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.newLoadingText}>Analyzing nutrients...</Text>
+              </View>
+            ) : displayNutrients.length === 0 ? (
+              <Text style={styles.newMutedText}>Nutritional analysis is not available.</Text>
+            ) : (
+              <View style={styles.newAdditivesList}>
+                {displayNutrients.map((item, idx) => {
+                  const risk = item.risk;
+                  const riskColor = risk === "Low" || risk === "Adequate" ? COLORS.primary : COLORS.risk_high;
+                  const riskIcon = risk === "Low" || risk === "Adequate" ? "checkmark-circle" : "alert-circle";
+                  const riskLabel = risk === "Low" ? "Low risk" : risk === "Adequate" ? "Adequate" : "High risk";
+                  return (
+                    <View
+                      key={`${item.nutrient}-${idx}`}
+                      style={[styles.newAdditiveRow, { borderColor: riskColor }]}
+                    >
+                      <View style={[styles.newAdditiveIconWrap, { backgroundColor: riskColor }]}>
+                        <Ionicons name={riskIcon as any} size={16} color="#FFFFFF" />
+                      </View>
+                      <View style={styles.newAdditiveTextWrap}>
+                        <Text style={styles.newAdditiveTitle}>
+                          {item.nutrient} ({item.amount})
                         </Text>
                         <Text style={[styles.newAdditiveRiskText, { color: riskColor }]}>{riskLabel}</Text>
                         <Text style={styles.newAdditiveDesc}>{item.consumingDescription}</Text>

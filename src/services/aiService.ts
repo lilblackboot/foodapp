@@ -14,10 +14,20 @@ export interface AdditiveRiskAnalysisItem {
   consumingDescription: string;
 }
 
+export type NutritionalRisk = "Low" | "Adequate" | "High";
+
+export interface NutritionalRiskAnalysisItem {
+  nutrient: string;
+  amount: string;
+  risk: NutritionalRisk;
+  consumingDescription: string;
+}
+
 export interface FoodAnalysisResponse {
   overallTag: OverallTag;
   overallSummary: string;
   additiveRiskAnalysis: AdditiveRiskAnalysisItem[];
+  nutritionalRiskAnalysis?: NutritionalRiskAnalysisItem[];
   // Only present when overallTag is not "high risk".
   safePortion: { servingText: string; note?: string } | null;
 }
@@ -104,18 +114,24 @@ TASK
    - "risk": one of "Low" | "Medium" | "High"
    - "consumingDescription": short (<= 20 words) user-specific note about what it could mean to consume.
 
-2) Provide "overallSummary": short (<= 35 words) on how the product could affect the user.
+2) For the primary "Nutrients" provided (Sugar, Sodium, Fat, Calories, Protein, etc.), provide a nutritional risk assessment considering the UserContext.
+   For each nutrient, provide:
+   - "nutrient": Name of the nutrient (e.g., "Sugar", "Sodium").
+   - "amount": The quantitative amount from the input data.
+   - "risk": one of "Low" | "Adequate" | "High".
+   - "consumingDescription": short (<= 20 words) rationale (e.g., "High sodium is dangerous for your hypertension.").
 
-3) Provide "overallTag": one of
-   - "safe" | "low risk" | "moderate risk" | "high risk"
+3) Provide "overallSummary": short (<= 35 words) on how the product could affect the user.
+
+4) Provide "overallTag": one of "safe" | "low risk" | "moderate risk" | "high risk"
 
    Use:
-   - "high risk" if any additive is High risk OR the product likely conflicts strongly with conditions/allergies (especially kidney/diabetes/hypertension).
-   - "moderate risk" if there are Medium additives or mildly elevated sugar/sodium/fat for the user.
-   - "low risk" if additives are mostly Low and nutrients look generally okay.
+   - "high risk" if any additive or nutrient is High risk OR the product likely conflicts strongly with conditions/allergies.
+   - "moderate risk" if there are Medium additives or mildly elevated nutrients for the user.
+   - "low risk" if additives are mostly Low and nutrients look generally Okay/Adequate.
    - "safe" only if everything looks Low-safe for the user.
 
-4) "safePortion":
+5) "safePortion":
    - If overallTag is NOT "high risk", set safePortion to an object with:
      - "servingText": safe portion to eat, e.g., "1 cup / serving", "1 bowl / serving", or "100 g / serving"
      - "note" (optional): <= 20 words.
@@ -127,6 +143,9 @@ RESPONSE SHAPE
   "overallSummary": string,
   "additiveRiskAnalysis": [
      { "additive": string, "risk": "Low"|"Medium"|"High", "consumingDescription": string }
+  ],
+  "nutritionalRiskAnalysis": [
+     { "nutrient": string, "amount": string, "risk": "Low"|"Adequate"|"High", "consumingDescription": string }
   ],
   "safePortion": { "servingText": string, "note"?: string } | null
 }
@@ -147,6 +166,7 @@ RESPONSE SHAPE
           risk: "Low",
           consumingDescription: "Likely low concern, but keep an eye on your individual sensitivities.",
         })),
+        nutritionalRiskAnalysis: [],
         safePortion: {
           servingText: "1 serving",
           note: "Start with a smaller portion if you are sensitive.",
@@ -174,6 +194,18 @@ RESPONSE SHAPE
           .filter((x: any) => x.additive.length > 0)
       : [];
 
+    const nutritionalRiskAnalysis: NutritionalRiskAnalysisItem[] = Array.isArray(parsed.nutritionalRiskAnalysis)
+      ? parsed.nutritionalRiskAnalysis
+          .slice(0, 10)
+          .map((x: any) => ({
+            nutrient: String(x?.nutrient ?? ""),
+            amount: String(x?.amount ?? ""),
+            risk: x?.risk === "High" ? "High" : x?.risk === "Adequate" ? "Adequate" : "Low",
+            consumingDescription: String(x?.consumingDescription ?? "").trim() || "Generally safe.",
+          }))
+          .filter((x: any) => x.nutrient.length > 0)
+      : [];
+
     const safePortion =
       overallTag === "high risk"
         ? null
@@ -190,6 +222,7 @@ RESPONSE SHAPE
       overallTag,
       overallSummary: String(parsed.overallSummary ?? "").trim() || "General guidance based on your profile.",
       additiveRiskAnalysis,
+      nutritionalRiskAnalysis,
       safePortion,
     };
   } catch (error) {
@@ -202,6 +235,7 @@ RESPONSE SHAPE
         risk: "Low",
         consumingDescription: "Analysis unavailable; consider limiting processed foods and additives.",
       })),
+      nutritionalRiskAnalysis: [],
       safePortion: {
         servingText: "1 serving",
         note: "If you are sensitive, try a smaller portion first.",
