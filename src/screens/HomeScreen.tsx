@@ -15,11 +15,20 @@ export default function HomeScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [todayLogsCount, setTodayLogsCount] = useState(0);
+  const [todayAdditives, setTodayAdditives] = useState<any[]>([]);
   const [userName, setUserName] = useState('User');
   const [recentFoods, setRecentFoods] = useState<any[]>([]);
 
   // Helper to get consistent date string
   const getTodayDate = () => new Date().toISOString().split('T')[0];
+
+  // Helper to get dynamic greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 4 && hour < 12) return 'Good morning,';
+    if (hour >= 12 && hour < 17) return 'Good afternoon,';
+    return 'Good evening,';
+  };
 
   // Load user name
   const loadUserName = async () => {
@@ -49,8 +58,7 @@ export default function HomeScreen({ navigation }: any) {
       const foodLogsRef = collection(db, 'users', currentUser.uid, 'food_logs');
       const todayQuery = query(
         foodLogsRef,
-        where('date', '==', today),
-        orderBy('timestamp', 'desc')
+        where('date', '==', today)
       );
       const todaySnapshot = await getDocs(todayQuery);
       
@@ -60,10 +68,23 @@ export default function HomeScreen({ navigation }: any) {
 
       let totalScore = 0;
       let logCount = 0;
+      const allAdditives = new Map();
 
       todaySnapshot.forEach((doc) => {
         const foodData = doc.data();
         logCount++;
+
+        // Collect additives
+        if (foodData.foodAnalysis && Array.isArray(foodData.foodAnalysis.additiveRiskAnalysis)) {
+          foodData.foodAnalysis.additiveRiskAnalysis.forEach((add: any) => {
+            if (add.additive) {
+              const normalKey = add.additive.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (!allAdditives.has(normalKey)) {
+                allAdditives.set(normalKey, add);
+              }
+            }
+          });
+        }
 
         // Calculate score based on nutrition profile
         const calories = foodData.calories || 0;
@@ -107,6 +128,7 @@ export default function HomeScreen({ navigation }: any) {
       });
 
       setTodayLogsCount(logCount);
+      setTodayAdditives(Array.from(allAdditives.values()));
       return Math.round(totalScore / logCount); // Average score
     } catch (error) {
       console.error('Error calculating vitality score:', error);
@@ -205,7 +227,7 @@ export default function HomeScreen({ navigation }: any) {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerContent}>
-            <Text style={styles.greeting}>Good morning,</Text>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
             <Text style={styles.userName}>{userName}</Text>
           </View>
           <TouchableOpacity 
@@ -294,7 +316,22 @@ export default function HomeScreen({ navigation }: any) {
           style={styles.recentScroll}
         >
           {recentFoods.map((food, idx) => {
-            const isSafe = (food.sodium < 1500 && food.sugar < 20); // Dummy logic for now
+            const overallTag = food?.foodAnalysis?.overallTag?.toLowerCase() || 'unknown';
+            
+            let badgeBg = COLORS.on_surface_variant;
+            let badgeText = "MODERATE";
+            
+            if (overallTag === 'safe' || overallTag === 'low risk') {
+              badgeBg = COLORS.primary;
+              badgeText = overallTag === 'safe' ? 'SAFE CHOICE' : 'LOW RISK';
+            } else if (overallTag === 'moderate risk') {
+              badgeBg = COLORS.risk_medium;
+              badgeText = 'MODERATE RISK';
+            } else if (overallTag === 'high risk') {
+              badgeBg = COLORS.risk_high;
+              badgeText = 'HIGH RISK';
+            }
+            
             return (
               <TouchableOpacity 
                 key={idx} 
@@ -309,9 +346,9 @@ export default function HomeScreen({ navigation }: any) {
                 <View style={styles.recentTextWrap}>
                   <Text style={styles.recentFoodName} numberOfLines={1}>{food.name || "Unknown Food"}</Text>
                   <View style={styles.recentStatusRow}>
-                    <View style={[styles.recentStatusDot, { backgroundColor: isSafe ? COLORS.primary : COLORS.on_surface_variant }]} />
-                    <Text style={[styles.recentStatusText, { color: isSafe ? COLORS.primary : COLORS.on_surface_variant }]}>
-                      {isSafe ? "SAFE CHOICE" : "MODERATE"}
+                    <View style={[styles.recentStatusDot, { backgroundColor: badgeBg }]} />
+                    <Text style={[styles.recentStatusText, { color: badgeBg }]}>
+                      {badgeText}
                     </Text>
                   </View>
                 </View>
@@ -322,6 +359,39 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={styles.noRecentText}>No recent scans. Try scanning a food!</Text>
           )}
         </ScrollView>
+
+        {/* Today's Additives */}
+        {todayAdditives.length > 0 && (
+          <View style={{ marginBottom: SPACING.xl, marginTop: SPACING.m }}>
+            <View style={styles.recentHeader}>
+              <Text style={styles.recentTitle}>Additives Consumed Today</Text>
+            </View>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.recentScroll} 
+              contentContainerStyle={styles.recentScrollContent}
+            >
+              {todayAdditives.map((item, idx) => {
+                const riskColor = item.risk === "Low" ? COLORS.primary : item.risk === "Medium" ? COLORS.risk_medium : COLORS.risk_high;
+                return (
+                  <View key={idx} style={[styles.recentCard, { width: 160, padding: 12 }]}>
+                    <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: riskColor }} />
+                       <Text style={{ fontSize: 10, fontWeight: '800', color: riskColor, textTransform: 'uppercase' }}>{item.risk} RISK</Text>
+                    </View>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.on_surface, marginBottom: 6 }} numberOfLines={2}>
+                      {item.additive}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 16 }} numberOfLines={3}>
+                      {item.consumingDescription}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
