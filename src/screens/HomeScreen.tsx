@@ -140,7 +140,15 @@ export default function HomeScreen({ navigation }: any) {
       });
 
       setTodayLogsCount(logCount);
-      setTodayAdditives(Array.from(allAdditives.values()));
+      
+      const sortedAdditives = Array.from(allAdditives.values()).sort((a: any, b: any) => {
+        const riskWeights: Record<string, number> = { "High": 3, "Medium": 2, "Low": 1 };
+        const weightA = riskWeights[a.risk] || 0;
+        const weightB = riskWeights[b.risk] || 0;
+        return weightB - weightA;
+      });
+      
+      setTodayAdditives(sortedAdditives);
       return Math.round(totalScore / logCount); // Average score
     } catch (error) {
       console.error('Error calculating vitality score:', error);
@@ -402,17 +410,19 @@ export default function HomeScreen({ navigation }: any) {
               {todayAdditives.map((item, idx) => {
                 const riskColor = item.risk === "Low" ? COLORS.primary : item.risk === "Medium" ? COLORS.risk_medium : COLORS.risk_high;
                 return (
-                  <View key={idx} style={[styles.recentCard, { width: 160, padding: 12 }]}>
-                    <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View key={idx} style={[styles.recentCard, { width: 160, padding: 12, justifyContent: 'space-between' }]}>
+                    <View>
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.on_surface, marginBottom: 6 }} numberOfLines={2}>
+                        {item.additive}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 16, marginBottom: 12 }} numberOfLines={3}>
+                        {item.consumingDescription}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: riskColor }} />
                        <Text style={{ fontSize: 10, fontWeight: '800', color: riskColor, textTransform: 'uppercase' }}>{item.risk} RISK</Text>
                     </View>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.on_surface, marginBottom: 6 }} numberOfLines={2}>
-                      {item.additive}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 16 }} numberOfLines={3}>
-                      {item.consumingDescription}
-                    </Text>
                   </View>
                 );
               })}
