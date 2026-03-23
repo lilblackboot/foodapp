@@ -296,7 +296,12 @@ export default function HomeScreen({ navigation }: any) {
           {recentFoods.map((food, idx) => {
             const isSafe = (food.sodium < 1500 && food.sugar < 20); // Dummy logic for now
             return (
-              <View key={idx} style={styles.recentCard}>
+              <TouchableOpacity 
+                key={idx} 
+                style={styles.recentCard}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('Scan', { screen: 'ScanResult', params: { foodLog: food } })}
+              >
                 <Image 
                   source={{uri: food.image || 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?q=80&w=300'}} 
                   style={styles.recentImage} 
@@ -310,7 +315,7 @@ export default function HomeScreen({ navigation }: any) {
                     </Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
           {recentFoods.length === 0 && !loading && (

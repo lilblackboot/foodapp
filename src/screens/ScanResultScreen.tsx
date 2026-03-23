@@ -13,14 +13,15 @@ import { FoodItem } from '../types';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ScanResultScreen({ route, navigation }: any) {
-  const { barcode, fromRecipe, recipeName, recipeNutrition, recipeBreakdown } = route.params || {};
+  const { barcode, fromRecipe, recipeName, recipeNutrition, recipeBreakdown, foodLog } = route.params || {};
   
-  // Check if this is a recipe scan or barcode scan
+  // Check if this is a recipe scan or barcode scan or viewing from history
   const isRecipe = fromRecipe === true;
+  const isHistoryView = !!foodLog;
   
   // Steps: 'loading' -> 'input' (ask grams) -> 'result' (show analysis)
-  // For recipes, skip input and go straight to result
-  const [step, setStep] = useState<'loading' | 'input' | 'result'>(fromRecipe ? 'result' : 'loading');
+  // For recipes and history, skip input and go straight to result
+  const [step, setStep] = useState<'loading' | 'input' | 'result'>(fromRecipe || isHistoryView ? 'result' : 'loading');
   
   // Data State
   const [baseFood, setBaseFood] = useState<any>(null); // The raw 100g data
@@ -45,7 +46,22 @@ export default function ScanResultScreen({ route, navigation }: any) {
   const [newNutritionModalVisible, setNewNutritionModalVisible] = useState(false);
 
   useEffect(() => {
-    if (fromRecipe && recipeNutrition) {
+    if (foodLog) {
+      setBaseFood(foodLog);
+      setFood(foodLog);
+      setPortionSize(foodLog.serving_size ? String(foodLog.serving_size) : '100');
+      setEditedName(foodLog.name);
+      
+      // Load previous result & analysis
+      setResult(foodLog.evaluationResult || {
+        decision: 'SAFE',
+        reason: 'Viewed from recent logs',
+        sugarOK: true,
+        sodiumOK: true,
+        caloriesOK: true
+      });
+      setFoodAnalysis(foodLog.foodAnalysis || null);
+    } else if (fromRecipe && recipeNutrition) {
       // For recipes, set up the food data directly from recipe nutrition
       const recipeFood = {
         name: recipeName || 'Homemade Recipe',
@@ -819,12 +835,14 @@ export default function ScanResultScreen({ route, navigation }: any) {
           </View>
         </Modal>
 
-        {/* Floating Action Button for Logging */}
-        <View style={styles.newFooter}>
-          <TouchableOpacity style={styles.newMainBtn} activeOpacity={0.8} onPress={logFood}>
-            <Text style={styles.newMainBtnText}>Log This Food</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Floating Action Button for Logging (hidden if view only) */}
+        {!isHistoryView && (
+          <View style={styles.newFooter}>
+            <TouchableOpacity style={styles.newMainBtn} activeOpacity={0.8} onPress={logFood}>
+              <Text style={styles.newMainBtnText}>Log This Food</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
     );
   }
@@ -1015,14 +1033,16 @@ export default function ScanResultScreen({ route, navigation }: any) {
       </Modal>
 
       {/* FOOTER */}
-      <View style={styles.footer}>
-        <TouchableOpacity style={[styles.button, { backgroundColor: statusColor }]} onPress={logFood}>
-          <Text style={styles.btnText}>Eat & Track</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
-          <Text style={{ color: COLORS.textSecondary }}>Cancel</Text>
-        </TouchableOpacity>
-      </View>
+      {!isHistoryView && (
+        <View style={styles.footer}>
+          <TouchableOpacity style={[styles.button, { backgroundColor: statusColor }]} onPress={logFood}>
+            <Text style={styles.btnText}>Eat & Track</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
+            <Text style={{ color: COLORS.textSecondary }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* EDIT NAME MODAL */}
       <Modal visible={editNameModalVisible} transparent animationType="fade">

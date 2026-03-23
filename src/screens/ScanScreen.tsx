@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { COLORS, SPACING } from '../constants/theme';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { 
   getFirestore, collection, query, where, getDocs, addDoc 
@@ -39,6 +39,7 @@ interface Product {
 }
 
 export default function ScanScreen({ navigation }: any) {
+  const isFocused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -233,7 +234,7 @@ export default function ScanScreen({ navigation }: any) {
   }
 
   const handleBarCodeScanned = ({ type, data }: any) => {
-    if (scanned) return;
+    if (scanned || !isFocused) return;
     setScanned(true);
     navigation.navigate('ScanResult', { barcode: data });
   };
@@ -257,14 +258,16 @@ export default function ScanScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <CameraView
-        style={StyleSheet.absoluteFillObject}
-        facing="back"
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"],
-        }}
-      />
+      {isFocused && (
+        <CameraView
+          style={StyleSheet.absoluteFillObject}
+          facing="back"
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"],
+          }}
+        />
+      )}
       
       <View style={styles.overlay}>
         <View style={styles.topContent}>

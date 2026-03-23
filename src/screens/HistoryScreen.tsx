@@ -139,7 +139,7 @@ function MonthView({ entryMap }: { entryMap: Map<string, number> }) {
 // ─────────────────────────────────────────────
 // Main Screen
 // ─────────────────────────────────────────────
-export default function HistoryScreen() {
+export default function HistoryScreen({ navigation }: any) {
   const [sections, setSections] = useState<Section[]>([]);
   const [entryMap, setEntryMap] = useState<Map<string, number>>(new Map());
   const [refreshing, setRefreshing] = useState(false);
@@ -241,7 +241,11 @@ export default function HistoryScreen() {
   );
 
   const renderItem = ({ item, section }: { item: FoodItem; section: Section }) => (
-    <View style={styles.foodRow}>
+    <TouchableOpacity 
+      style={styles.foodRow}
+      activeOpacity={0.8}
+      onPress={() => navigation.navigate('Scan', { screen: 'ScanResult', params: { foodLog: item } })}
+    >
       <View style={styles.foodInfo}>
         <Text style={styles.foodName}>{item.name}</Text>
         <Text style={styles.foodDetails}>
@@ -257,7 +261,7 @@ export default function HistoryScreen() {
           <Ionicons name="trash-outline" size={18} color="#FF453A" />
         </View>
       </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
