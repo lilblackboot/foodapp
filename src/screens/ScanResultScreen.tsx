@@ -40,6 +40,8 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
   const [additiveInfoVisible, setAdditiveInfoVisible] = useState(false);
   const [selectedAdditive, setSelectedAdditive] = useState<string | null>(null);
+  
+  const [newNutritionModalVisible, setNewNutritionModalVisible] = useState(false);
 
   useEffect(() => {
     if (fromRecipe && recipeNutrition) {
@@ -614,6 +616,13 @@ export default function ScanResultScreen({ route, navigation }: any) {
             ) : (
               <View style={styles.newProductImagePlaceholder} />
             )}
+            <TouchableOpacity 
+              style={styles.newNutritionInfoBtn}
+              activeOpacity={0.8}
+              onPress={() => setNewNutritionModalVisible(true)}
+            >
+              <Ionicons name="information-circle" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
             <View style={[styles.newBadge, { backgroundColor: badgeBg }]}>
               <Text style={styles.newBadgeText}>{badgeText}</Text>
             </View>
@@ -650,6 +659,8 @@ export default function ScanResultScreen({ route, navigation }: any) {
               <Text style={styles.newIdealNote}>{foodAnalysis.safePortion.note}</Text>
             ) : null}
           </View>
+
+
 
           {/* Additive risk analysis */}
           <View style={styles.newAdditiveSection}>
@@ -711,6 +722,35 @@ export default function ScanResultScreen({ route, navigation }: any) {
             </View>
           </View>
         </ScrollView>
+
+        <Modal visible={newNutritionModalVisible} transparent animationType="fade" onRequestClose={() => setNewNutritionModalVisible(false)}>
+          <View style={styles.modalBg}>
+            <View style={styles.newModalCard}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Text style={styles.modalTitle}>Nutritional Info</Text>
+                <TouchableOpacity onPress={() => setNewNutritionModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+                </TouchableOpacity>
+              </View>
+              <View>
+                {nutrientsRows.filter(r => r.value !== undefined && r.value !== null && !Number.isNaN(Number(r.value))).map((row, idx, arr) => {
+                  const display = (row.label.includes('(kcal)') || row.label.includes('(mg)')) 
+                    ? String(Math.round(Number(row.value))) 
+                    : String(Number(row.value).toFixed(1));
+                  const isLast = idx === arr.length - 1;
+                  
+                  return (
+                    <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: isLast ? 0 : 1, borderBottomColor: '#F0F0F0' }}>
+                      <Text style={{ color: COLORS.textSecondary, fontSize: 13 }}>{row.label}</Text>
+                      <Text style={{ color: COLORS.on_surface, fontSize: 13, fontWeight: '700' }}>{display}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </Modal>
+
       </SafeAreaView>
     );
   }
@@ -961,6 +1001,9 @@ const styles = StyleSheet.create({
   newProductImage: { height: 260, borderRadius: 18, width: "100%" },
   newBadge: { position: "absolute", right: 18, bottom: 18, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   newBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+
+  newNutritionInfoBtn: { position: "absolute", top: 12, right: 12, backgroundColor: "#FFFFFF", padding: 4, borderRadius: 20, elevation: 4, shadowColor: "#000", shadowOffset: {width:0, height:2}, shadowOpacity: 0.2, shadowRadius: 4 },
+  newModalCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 24, width: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
 
   newMeta: { marginTop: 4, marginBottom: 20 },
   newProductTitle: { color: COLORS.on_surface, fontSize: 18, fontWeight: "800", lineHeight: 26 },
