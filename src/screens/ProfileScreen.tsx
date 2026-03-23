@@ -1,11 +1,12 @@
-import React, { useEffect, useState, useLayoutEffect } from 'react';
+import React, { useEffect, useState, useLayoutEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { doc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseConfig';
 import { reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { COLORS, SPACING, TYPOGRAPHY, FONTS, BORDER_RADIUS, ELEVATION } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { calculateDailyNutritionGoals, calculateBMI } from '../services/nutritionCalculator';
 
 export default function ProfileScreen({ navigation }: any) {
@@ -51,7 +52,27 @@ export default function ProfileScreen({ navigation }: any) {
   // Options
   const genderOptions = ['Male', 'Female', 'Other', 'Prefer not to say'];
   const activityOptions = ['Sedentary', 'Lightly active', 'Moderately active', 'Very active'];
-  const diseaseOptions = ['None', 'Diabetes', 'Hypertension', 'Heart disease', 'Kidney disease', 'Liver disease', 'Thyroid', 'Arthritis', 'Asthma', 'Other'];
+  const diseaseOptions = [
+    'Diabetes (Type 1)',
+    'Diabetes (Type 2)',
+    'Pre-diabetic',
+    'Hypertension',
+    'Hypotension',
+    'Cardiovascular disease',
+    'Obesity',
+    'Thyroid disorders',
+    'PCOS / PCOD',
+    'Kidney disease',
+    'Liver disease',
+    'Gout',
+    'Anemia',
+    'Asthma',
+    'Lactose intolerance',
+    'Gluten sensitivity',
+    'HIV/AIDS',
+    'None',
+    'Prefer not to disclose',
+  ];
   const allergyOptions = ['None', 'Nuts', 'Dairy', 'Gluten', 'Eggs', 'Soy', 'Fish', 'Shellfish', 'Other'];
   const smokingOptions = ['Never', 'Former', 'Current'];
   const alcoholOptions = ['Never', 'Occasionally', 'Weekly', 'Daily'];
@@ -65,7 +86,8 @@ export default function ProfileScreen({ navigation }: any) {
       const currentUser = auth.currentUser;
       if (!currentUser) return;
 
-      const userDoc = await getDoc(doc(db, "user_profiles", currentUser.uid));
+      // Force read from server, bypassing Firestore's offline cache
+      const userDoc = await getDocFromServer(doc(db, "user_profiles", currentUser.uid));
       if (userDoc.exists()) {
         const data = userDoc.data();
         setName(data.name || '');
@@ -145,12 +167,13 @@ export default function ProfileScreen({ navigation }: any) {
         profileVersion: 2,
       };
 
-      await updateDoc(doc(db, "user_profiles", currentUser.uid), profileData);
+      // Use setDoc with merge:true so it works even if the doc doesn't exist yet
+      await setDoc(doc(db, "user_profiles", currentUser.uid), profileData, { merge: true });
       Alert.alert("Success", "Profile updated successfully!");
       setIsEditing(false);
-    } catch (error) {
-      console.error('Error saving profile:', error);
-      Alert.alert("Error", "Failed to update profile");
+    } catch (error: any) {
+      console.error('Error saving profile:', error?.code, error?.message, error);
+      Alert.alert("Error", `Failed to update profile: ${error?.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -168,9 +191,21 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
-  // Toggle Disease (single select)
+  // Toggle Disease - multi-select with None/Prefer not to disclose as exclusive options
   const toggleDisease = (disease: string) => {
-    setDiseases(disease === diseases[0] ? [] : [disease]);
+    const exclusiveOptions = ['None', 'Prefer not to disclose'];
+    if (exclusiveOptions.includes(disease)) {
+      // Tapping an exclusive option sets it as the only selection
+      setDiseases(prev => prev.length === 1 && prev[0] === disease ? [] : [disease]);
+    } else {
+      // Remove any exclusive options and toggle the tapped disease
+      setDiseases(prev => {
+        const filtered = prev.filter(d => !exclusiveOptions.includes(d));
+        return filtered.includes(disease)
+          ? filtered.filter(d => d !== disease)
+          : [...filtered, disease];
+      });
+    }
   };
 
   // Delete Account
@@ -238,9 +273,12 @@ export default function ProfileScreen({ navigation }: any) {
     });
   }, [navigation, isEditing, saving]);
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  // Re-fetch profile every time the screen is focused (fixes stale data on revisit)
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfile();
+    }, [])
+  );
 
   if (loading) {
     return (

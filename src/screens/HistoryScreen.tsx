@@ -1,8 +1,8 @@
 // src/screens/HistoryScreen.tsx
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, SectionList, TouchableOpacity,
-  Alert, ActivityIndicator, ScrollView, Dimensions,
+  View, Text, StyleSheet, TouchableOpacity,
+  Alert, ActivityIndicator, ScrollView, Dimensions, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -39,7 +39,13 @@ interface DayEntry {
 const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MAX_LINES = 5; // max green lines to show per cell
 
-function MonthView({ entryMap }: { entryMap: Map<string, number> }) {
+function MonthView({
+  entryMap,
+  onDateSelect,
+}: {
+  entryMap: Map<string, number>;
+  onDateSelect: (date: string) => void;
+}) {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth()); // 0-indexed
@@ -101,7 +107,12 @@ function MonthView({ entryMap }: { entryMap: Map<string, number> }) {
           const lineCount = Math.min(count, MAX_LINES);
 
           return (
-            <View key={dateStr} style={[styles.dayCell, isToday && styles.todayCell]}>
+            <TouchableOpacity
+              key={dateStr}
+              style={[styles.dayCell, isToday && styles.todayCell]}
+              activeOpacity={0.7}
+              onPress={() => onDateSelect(dateStr)}
+            >
               <Text style={[styles.dayCellNumber, isToday && styles.todayCellNumber]}>{day}</Text>
               {count === 0 ? (
                 <Text style={styles.dashText}>—</Text>
@@ -118,7 +129,7 @@ function MonthView({ entryMap }: { entryMap: Map<string, number> }) {
                   ))}
                 </View>
               )}
-            </View>
+            </TouchableOpacity>
           );
         })}
       </View>
@@ -131,50 +142,36 @@ function MonthView({ entryMap }: { entryMap: Map<string, number> }) {
 // Main Screen
 // ─────────────────────────────────────────────
 export default function HistoryScreen({ navigation }: any) {
-  const [sections, setSections] = useState<Section[]>([]);
+  const d0 = new Date();
+  const todayStr = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, '0')}-${String(d0.getDate()).padStart(2, '0')}`;
+
+  const [allFoods, setAllFoods] = useState<Map<string, FoodItem[]>>(new Map());
   const [entryMap, setEntryMap] = useState<Map<string, number>>(new Map());
+  const [summaryMap, setSummaryMap] = useState<Map<string, DailySummary>>(new Map());
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [activeTab, setActiveTab] = useState<'day' | 'month'>('day');
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'day' | 'month'>('day');
 
   const loadAllHistory = async () => {
     setRefreshing(true);
     try {
       const summaries = await getHistory();
 
-      const promises = summaries.map(async (summary) => {
+      const foodMap = new Map<string, FoodItem[]>();
+      const sumMap = new Map<string, DailySummary>();
+      const eMap = new Map<string, number>();
+
+      await Promise.all(summaries.map(async (summary) => {
         const foods = await getFoodsByDate(summary.date);
+        foodMap.set(summary.date, foods);
+        sumMap.set(summary.date, summary);
+        if (foods.length > 0) eMap.set(summary.date, foods.length);
+      }));
 
-        const dateObj = new Date(summary.date);
-        dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
-
-        const dayNumber = dateObj.getDate().toString();
-        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
-        const monthName = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-        return {
-          title: summary.date,
-          dayNumber,
-          dayName,
-          monthName,
-          summary,
-          data: foods,
-        };
-      });
-
-      const resolved = await Promise.all(promises);
-
-      // Build entryMap (date -> food count) from ALL summaries
-      const map = new Map<string, number>();
-      resolved.forEach(s => { if (s.data.length > 0) map.set(s.title, s.data.length); });
-      setEntryMap(map);
-
-      // Day view: only show dates with food
-      const filtered = resolved
-        .filter(s => s.data.length > 0)
-        .sort((a, b) => new Date(b.summary.date).getTime() - new Date(a.summary.date).getTime());
-
-      setSections(filtered);
+      setAllFoods(foodMap);
+      setSummaryMap(sumMap);
+      setEntryMap(eMap);
     } catch (e) {
       console.error('Failed to load history data:', e);
       Alert.alert('Error', 'Failed to load history data.');
@@ -184,6 +181,12 @@ export default function HistoryScreen({ navigation }: any) {
   };
 
   useFocusEffect(useCallback(() => { loadAllHistory(); }, []));
+
+  // When a month cell is tapped → switch to Day view for that date
+  const handleDateSelect = (date: string) => {
+    setSelectedDate(date);
+    setActiveTab('day');
+  };
 
   const handleRemove = (food: FoodItem, date: string) => {
     Alert.alert(
@@ -209,51 +212,14 @@ export default function HistoryScreen({ navigation }: any) {
     );
   };
 
-  // ── Day View renderers ──
-  const renderSectionHeader = ({ section }: { section: Section }) => (
-    <View style={styles.sectionHeaderContainer}>
-      <View style={styles.dateHeaderRow}>
-        <View style={styles.dateBox}>
-          <Text style={styles.dateNumber}>{section.dayNumber}</Text>
-        </View>
-        <View style={styles.dateTextContainer}>
-          <Text style={styles.dayNameText}>{section.dayName}</Text>
-          <Text style={styles.monthNameText}>{section.monthName}</Text>
-        </View>
-        <View style={styles.headerMacros}>
-          <Text style={styles.totalCalText}>
-            {Math.round(section.summary.totalCalories)}{' '}
-            <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>kcal</Text>
-          </Text>
-        </View>
-      </View>
-      <View style={styles.divider} />
-    </View>
-  );
-
-  const renderItem = ({ item, section }: { item: FoodItem; section: Section }) => (
-    <TouchableOpacity 
-      style={styles.foodRow}
-      activeOpacity={0.8}
-      onPress={() => navigation.navigate('Scan', { screen: 'ScanResult', params: { foodLog: item } })}
-    >
-      <View style={styles.foodInfo}>
-        <Text style={styles.foodName}>{item.name}</Text>
-        <Text style={styles.foodDetails}>
-          {Math.round(item.calories)} kcal • {item.serving_size}
-        </Text>
-      </View>
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={() => handleRemove(item, section.summary.date)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.removeIconContainer}>
-          <Ionicons name="trash-outline" size={18} color="#FF453A" />
-        </View>
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
+  // ── Day View: derive display data from selectedDate ──
+  const dateObj = new Date(selectedDate + 'T00:00:00');
+  const dayNumber = dateObj.getDate().toString();
+  const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const monthName = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const dayFoods = allFoods.get(selectedDate) ?? [];
+  const daySummary = summaryMap.get(selectedDate);
+  const isToday = selectedDate === todayStr;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -284,29 +250,74 @@ export default function HistoryScreen({ navigation }: any) {
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       ) : activeTab === 'month' ? (
-        <MonthView entryMap={entryMap} />
+        <MonthView entryMap={entryMap} onDateSelect={handleDateSelect} />
       ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item, index) => item.id || index.toString()}
-          renderSectionHeader={renderSectionHeader}
-          renderItem={renderItem}
+        // ── Single-date Day View ──
+        <ScrollView
           contentContainerStyle={styles.listContent}
-          refreshing={refreshing}
-          onRefresh={loadAllHistory}
-          stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Ionicons name="fast-food-outline" size={60} color="#AAA" style={{ marginBottom: 15 }} />
-              <Text style={styles.noDataText}>No history logged yet.</Text>
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadAllHistory} />}
+        >
+          {/* Date header — always visible */}
+          <View style={styles.sectionHeaderContainer}>
+            <View style={styles.dateHeaderRow}>
+              <View style={styles.dateBox}>
+                <Text style={styles.dateNumber}>{dayNumber}</Text>
+              </View>
+              <View style={styles.dateTextContainer}>
+                <Text style={styles.dayNameText}>{dayName}{isToday ? '  (Today)' : ''}</Text>
+                <Text style={styles.monthNameText}>{monthName}</Text>
+              </View>
+              {daySummary && (
+                <View style={styles.headerMacros}>
+                  <Text style={styles.totalCalText}>
+                    {Math.round(daySummary.totalCalories)}{' '}
+                    <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>kcal</Text>
+                  </Text>
+                </View>
+              )}
             </View>
-          }
-        />
+            <View style={styles.divider} />
+          </View>
+
+          {/* Food items or empty state */}
+          {dayFoods.length === 0 ? (
+            <View style={styles.emptyDay}>
+              <Ionicons name="fast-food-outline" size={48} color="#CCC" />
+              <Text style={styles.emptyDayText}>No meals logged{isToday ? ' today' : ' on this day'}.</Text>
+            </View>
+          ) : (
+            dayFoods.map((item, idx) => (
+              <TouchableOpacity
+                key={item.id || idx.toString()}
+                style={styles.foodRow}
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('Scan', { screen: 'ScanResult', params: { foodLog: item } })}
+              >
+                <View style={styles.foodInfo}>
+                  <Text style={styles.foodName}>{item.name}</Text>
+                  <Text style={styles.foodDetails}>
+                    {Math.round(item.calories)} kcal • {item.serving_size}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => handleRemove(item, selectedDate)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.removeIconContainer}>
+                    <Ionicons name="trash-outline" size={18} color="#FF453A" />
+                  </View>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
       )}
     </SafeAreaView>
   );
 }
+
 
 // ─────────────────────────────────────────────
 // Styles
@@ -475,5 +486,15 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: COLORS.primary,
+  },
+  emptyDay: {
+    alignItems: 'center',
+    paddingTop: 48,
+    gap: 12,
+  },
+  emptyDayText: {
+    fontSize: 15,
+    color: '#AAA',
+    fontWeight: '500',
   },
 });

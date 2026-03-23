@@ -258,7 +258,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
       const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
       const profileData = profileSnap.exists() ? profileSnap.data() : {};
-      const today = new Date().toISOString().split('T')[0];
+      const _d1 = new Date(); const today = `${_d1.getFullYear()}-${String(_d1.getMonth()+1).padStart(2,'0')}-${String(_d1.getDate()).padStart(2,'0')}`;
       const intakeSnap = await getDoc(doc(db, "daily_intake", `${user.uid}_${today}`));
       const intakeData = intakeSnap.exists() ? intakeSnap.data() : {};
 
@@ -345,7 +345,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
         evaluationResult: result,
       };
       
-      const todayDate = new Date().toISOString().split('T')[0];
+      const _d2 = new Date(); const todayDate = `${_d2.getFullYear()}-${String(_d2.getMonth()+1).padStart(2,'0')}-${String(_d2.getDate()).padStart(2,'0')}`;
 
       // Call the new helper function
       await logFoodItem(itemToLog, todayDate);
