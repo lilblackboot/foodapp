@@ -29,7 +29,8 @@ export const logFoodItem = async (food: FoodItem, date: string): Promise<void> =
   batch.set(logRef, {
     ...food,
     date: date,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    timestamp: Date.now()
   });
 
   // C. Update the Daily Summary (Increment totals)

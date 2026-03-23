@@ -11,6 +11,8 @@ export interface FoodItem {
   serving_size: string | number;
   date?: string;
   createdAt?: string;
+  timestamp?: number;
+  image?: string | null;
 }
 
 export interface DailySummary {

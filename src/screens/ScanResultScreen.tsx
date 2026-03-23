@@ -30,6 +30,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [foodAnalysis, setFoodAnalysis] = useState<FoodAnalysisResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisFailed, setAnalysisFailed] = useState(false);
   
   // Edit name state
   const [editNameModalVisible, setEditNameModalVisible] = useState(false);
@@ -288,12 +289,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
         setFoodAnalysis(aiResponse);
       } catch (aiError) {
         console.warn("⚠️ AI Analysis error:", aiError);
-        setFoodAnalysis({
-          overallTag: "low risk",
-          overallSummary: "Analysis is temporarily unavailable. Review ingredients and portion size.",
-          additiveRiskAnalysis: [],
-          safePortion: { servingText: "1 serving", note: "If you are sensitive, choose a smaller portion." },
-        });
+        setAnalysisFailed(true);
       }
 
     } catch (e) {
@@ -327,7 +323,8 @@ export default function ScanResultScreen({ route, navigation }: any) {
         fat: food.fat,
         sugar: food.sugar || 0,
         sodium: food.sodium || 0,
-        serving_size: portionSize, // Storing what user typed (e.g. "150")
+        serving_size: portionSize,
+        image: food.image || null,
       };
       
       const todayDate = new Date().toISOString().split('T')[0];
@@ -574,6 +571,25 @@ export default function ScanResultScreen({ route, navigation }: any) {
   const displayAdditives = foodAnalysis?.additiveRiskAnalysis ?? [];
 
   if (true) {
+    if (analysisFailed) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <View style={[styles.center, { padding: 24 }]}>
+            <Ionicons name="alert-circle-outline" size={64} color={COLORS.risk_high} />
+            <Text style={{ marginTop: 16, fontSize: 18, color: COLORS.on_surface, fontWeight: "800", textAlign: "center" }}>
+              Analysis Not Generated
+            </Text>
+            <Text style={{ marginTop: 8, fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20 }}>
+              We couldn't generate the AI response for this food. The server might be busy or unavailable.
+            </Text>
+            <TouchableOpacity style={{ marginTop: 32, paddingVertical: 14, paddingHorizontal: 32, backgroundColor: COLORS.primary, borderRadius: 16 }} onPress={() => navigation.goBack()}>
+              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 16 }}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
     if (!foodAnalysis) {
       return (
         <SafeAreaView style={styles.container}>
@@ -675,7 +691,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
                 <Text style={styles.newLoadingText}>Analyzing additives...</Text>
               </View>
             ) : displayAdditives.length === 0 ? (
-              <Text style={styles.newMutedText}>No additives detected for this product.</Text>
+              <Text style={styles.newMutedText}>Information on additives is not available.</Text>
             ) : (
               <View style={styles.newAdditivesList}>
                 {displayAdditives.map((item, idx) => {
@@ -751,6 +767,12 @@ export default function ScanResultScreen({ route, navigation }: any) {
           </View>
         </Modal>
 
+        {/* Floating Action Button for Logging */}
+        <View style={styles.newFooter}>
+          <TouchableOpacity style={styles.newMainBtn} activeOpacity={0.8} onPress={logFood}>
+            <Text style={styles.newMainBtnText}>Log This Food</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -987,7 +1009,7 @@ const styles = StyleSheet.create({
   newScrollContent: {
     paddingHorizontal: 20,
     paddingVertical: 16,
-    paddingBottom: 50,
+    paddingBottom: 110,
     backgroundColor: COLORS.background,
   },
   newTopBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 2, marginBottom: 20, position: "relative" },
@@ -1040,6 +1062,10 @@ const styles = StyleSheet.create({
   newAltImage: { height: 82, borderRadius: 12, marginBottom: 10 },
   newAltTitle: { fontSize: 12, fontWeight: "900", color: COLORS.on_surface },
   newAltSub: { marginTop: 4, fontSize: 10, fontWeight: "700", color: COLORS.textSecondary },
+
+  newFooter: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingVertical: 16, backgroundColor: COLORS.background, borderTopWidth: 1, borderTopColor: '#E9E9E9' },
+  newMainBtn: { backgroundColor: COLORS.primary, paddingVertical: 16, borderRadius: 16, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
+  newMainBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 16 },
 
   card: { backgroundColor: COLORS.surface, borderRadius: 20, padding: SPACING.l, marginBottom: SPACING.l },
   productTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },

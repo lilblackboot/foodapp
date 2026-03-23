@@ -1,6 +1,6 @@
 // src/screens/HomeScreen.tsx
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,6 +16,7 @@ export default function HomeScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [todayLogsCount, setTodayLogsCount] = useState(0);
   const [userName, setUserName] = useState('User');
+  const [recentFoods, setRecentFoods] = useState<any[]>([]);
 
   // Helper to get consistent date string
   const getTodayDate = () => new Date().toISOString().split('T')[0];
@@ -113,6 +114,20 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
+  const fetchRecentFoods = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    try {
+      const foodLogsRef = collection(db, 'users', currentUser.uid, 'food_logs');
+      const recentQuery = query(foodLogsRef, orderBy('timestamp', 'desc'), limit(5));
+      const snapshot = await getDocs(recentQuery);
+      const foods = snapshot.docs.map(doc => doc.data());
+      setRecentFoods(foods);
+    } catch (e) {
+      console.error("Error fetching recent foods:", e);
+    }
+  };
+
   // Load Vitality Score
   const loadVitalityScore = async () => {
     setLoading(true);
@@ -120,6 +135,7 @@ export default function HomeScreen({ navigation }: any) {
       await loadUserName();
       const score = await calculateVitalityScore();
       setVitalityScore(score);
+      await fetchRecentFoods();
     } catch (error) {
       console.error('Error loading vitality score:', error);
     } finally {
@@ -262,6 +278,45 @@ export default function HomeScreen({ navigation }: any) {
             </Text>
           </View>
         </View>
+
+        {/* Recent Scans */}
+        <View style={styles.recentHeader}>
+          <Text style={styles.recentTitle}>Recent Scans</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('History')}>
+            <Text style={styles.recentViewAll}>View History</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.recentScrollContent}
+          style={styles.recentScroll}
+        >
+          {recentFoods.map((food, idx) => {
+            const isSafe = (food.sodium < 1500 && food.sugar < 20); // Dummy logic for now
+            return (
+              <View key={idx} style={styles.recentCard}>
+                <Image 
+                  source={{uri: food.image || 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?q=80&w=300'}} 
+                  style={styles.recentImage} 
+                />
+                <View style={styles.recentTextWrap}>
+                  <Text style={styles.recentFoodName} numberOfLines={1}>{food.name || "Unknown Food"}</Text>
+                  <View style={styles.recentStatusRow}>
+                    <View style={[styles.recentStatusDot, { backgroundColor: isSafe ? COLORS.primary : COLORS.on_surface_variant }]} />
+                    <Text style={[styles.recentStatusText, { color: isSafe ? COLORS.primary : COLORS.on_surface_variant }]}>
+                      {isSafe ? "SAFE CHOICE" : "MODERATE"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+          {recentFoods.length === 0 && !loading && (
+            <Text style={styles.noRecentText}>No recent scans. Try scanning a food!</Text>
+          )}
+        </ScrollView>
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
@@ -467,5 +522,82 @@ const styles = StyleSheet.create({
     color: COLORS.on_surface_variant,
     fontWeight: FONTS.weight_medium,
     textAlign: 'center',
+  },
+
+  // Recent Scans
+  recentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: SPACING.m,
+  },
+  recentTitle: {
+    fontFamily: FONTS.display,
+    fontSize: 20, 
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.on_surface,
+  },
+  recentViewAll: {
+    fontFamily: FONTS.body,
+    fontSize: 12,
+    fontWeight: FONTS.weight_bold,
+    color: COLORS.primary,
+  },
+  recentScroll: {
+    marginHorizontal: -24, 
+  },
+  recentScrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: SPACING.xl,
+    gap: 16,
+  },
+  recentCard: {
+    width: 140,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  recentImage: {
+    width: '100%',
+    height: 100,
+    borderRadius: 12,
+    backgroundColor: '#F0F0F0',
+  },
+  recentTextWrap: {
+    paddingTop: 12,
+    paddingBottom: 4,
+    paddingHorizontal: 4,
+  },
+  recentFoodName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    marginBottom: 6,
+  },
+  recentStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recentStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  recentStatusText: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  noRecentText: {
+    color: COLORS.on_surface_variant,
+    fontSize: 14,
+    fontStyle: 'italic',
+    paddingVertical: 20,
   },
 });

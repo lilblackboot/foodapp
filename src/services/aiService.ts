@@ -94,11 +94,13 @@ INPUT
 FoodName: ${foodName ?? "Unknown food"}
 Nutrients (per chosen serving): ${JSON.stringify(nutrients)}
 Ingredients (if available): ${JSON.stringify(ingredientsArr.slice(0, 30))}
-Additives (if available): ${JSON.stringify(additivesArr.slice(0, 15))}
+Known Additives (if any): ${JSON.stringify(additivesArr.slice(0, 15))}
 UserContext: ${JSON.stringify(userProfileBlock)}
 
 TASK
-1) For each item in "Additives", provide:
+1) Identify any food additives, preservatives, or artificial colors from the "Ingredients" list or "Known Additives".
+   For each identified additive, provide:
+   - "additive": Name of the additive (e.g., "Citric Acid", "INS 635", "Red 40").
    - "risk": one of "Low" | "Medium" | "High"
    - "consumingDescription": short (<= 20 words) user-specific note about what it could mean to consume.
 
