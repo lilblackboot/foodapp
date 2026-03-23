@@ -13,6 +13,8 @@ export interface FoodItem {
   createdAt?: string;
   timestamp?: number;
   image?: string | null;
+  foodAnalysis?: any;
+  evaluationResult?: any;
 }
 
 export interface DailySummary {

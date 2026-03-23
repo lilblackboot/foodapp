@@ -325,6 +325,8 @@ export default function ScanResultScreen({ route, navigation }: any) {
         sodium: food.sodium || 0,
         serving_size: portionSize,
         image: food.image || null,
+        foodAnalysis,
+        evaluationResult: result,
       };
       
       const todayDate = new Date().toISOString().split('T')[0];

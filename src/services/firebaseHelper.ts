@@ -46,6 +46,11 @@ export const logFoodItem = async (food: FoodItem, date: string): Promise<void> =
   }, { merge: true });
 
   await batch.commit();
+
+  console.log(`\n✅ SUCCESS: Logged food "${food.name}" to database!`);
+  console.log(`   User ID: ${uid}`);
+  console.log(`   Document ID: ${logRef.id}`);
+  console.log(`   Calories: ${food.calories.toFixed(1)} kcal | Portion: ${food.serving_size}\n`);
 };
 
 // 2. GET TODAY'S FOOD LIST
