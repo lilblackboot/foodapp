@@ -65,25 +65,43 @@ function MainTabs() {
         },
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.on_surface_variant,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          paddingBottom: 4,
+        },
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: any;
-
           if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
+            return <Ionicons name={focused ? 'grid' : 'grid-outline'} size={24} color={color} />;
           } else if (route.name === 'History') {
-            iconName = focused ? 'calendar' : 'calendar-outline';
+            return <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={24} color={color} />;
           } else if (route.name === 'Scan') {
-            iconName = focused ? 'scan-circle' : 'scan-circle-outline';
-            size = 35;
+            return (
+              <View style={{
+                top: -15,
+                justifyContent: 'center',
+                alignItems: 'center',
+                width: 60,
+                height: 60,
+                borderRadius: 30,
+                backgroundColor: COLORS.primary,
+                shadowColor: COLORS.primary,
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 12,
+                elevation: 5,
+              }}>
+                <Ionicons name="barcode-outline" size={30} color="#FFFFFF" />
+              </View>
+            );
           }
-
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return null;
         },
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Scan" component={ScanStackNavigator} /> 
-      <Tab.Screen name="History" component={HistoryScreen} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Home' }} />
+      <Tab.Screen name="Scan" component={ScanStackNavigator} options={{ tabBarLabel: () => null }} /> 
+      <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Logs' }} />
     </Tab.Navigator>
   );
 }
