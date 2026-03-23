@@ -41,6 +41,14 @@ export const COLORS = {
   // Glassmorphism & Special
   glass_surface: 'rgba(255, 255, 255, 0.7)', // Semi-transparent surface
   ghost_border: 'rgba(202, 196, 208, 0.15)', // Ghost border at 15% opacity
+
+  // Backwards-compatible aliases (older screens reference these keys)
+  background: '#F9F9F9',
+  textPrimary: '#1A1C1C',
+  textSecondary: '#49454F',
+  success: '#006E1C',
+  warning: '#FF8F00',
+  danger: '#BA1A1A',
 };
 
 export const SPACING = {

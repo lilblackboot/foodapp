@@ -5,11 +5,12 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseConfig';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { evaluateFood, EvaluationResult } from '../logic/RuleEngine';
-import { getFoodAnalysis } from '../services/aiService';
+import { FoodAnalysisResponse, getFoodAnalysis } from '../services/aiService';
 
 // [NEW] Import the new helper and types
 import { logFoodItem } from '../services/firebaseHelper';
 import { FoodItem } from '../types';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ScanResultScreen({ route, navigation }: any) {
   const { barcode, fromRecipe, recipeName, recipeNutrition, recipeBreakdown } = route.params || {};
@@ -27,7 +28,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
   const [portionSize, setPortionSize] = useState('100'); // User input string
   
   const [result, setResult] = useState<EvaluationResult | null>(null);
-  const [aiExplanation, setAiExplanation] = useState<string>("Generating health insights...");
+  const [foodAnalysis, setFoodAnalysis] = useState<FoodAnalysisResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   // Edit name state
@@ -69,6 +70,14 @@ export default function ScanResultScreen({ route, navigation }: any) {
         sodiumOK: true,
         caloriesOK: true
       } as any) as EvaluationResult);
+
+      // Recipes currently bypass AI generation; show a safe default.
+      setFoodAnalysis({
+        overallTag: "safe",
+        overallSummary: "Custom recipe from your ingredients. Keep portions reasonable and check ingredients for additives if needed.",
+        additiveRiskAnalysis: [],
+        safePortion: { servingText: "1 serving", note: "Start with 1 serving and adjust based on your needs." },
+      });
     } else if (barcode) {
       // For barcode scans, fetch data
       fetchBaseData();
@@ -239,22 +248,50 @@ export default function ScanResultScreen({ route, navigation }: any) {
       setStep('result');
 
       try {
-        const aiResponse = await getFoodAnalysis(
-          String(calculatedFood.name || "Unknown"),
-          {
-             sugar: Number(calculatedFood.sugar) || 0, 
-             sodium: Number(calculatedFood.sodium) || 0, 
-             fat: Number(calculatedFood.fat) || 0,
-             calories: Number(calculatedFood.calories) || 0
-          }, 
-          calculatedFood.ingredients || [], 
-          profileData || {}, 
-          decisionResult?.decision || "UNKNOWN" 
-        );
-        setAiExplanation(aiResponse || "Analysis complete");
+        const ingredientsText = String(calculatedFood?.ingredients || "");
+        const ingredientsArr = ingredientsText
+          ? ingredientsText
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+
+        // Extract common INS codes from the ingredients text (e.g., INS 635, INS451(i))
+        const additiveCodes: string[] = [];
+        if (typeof ingredientsText === "string" && ingredientsText.length > 0) {
+          const re = /INS\s*([0-9]{3})(?:\s*\(\s*([a-zA-Z])\s*\))?/gi;
+          let m: RegExpExecArray | null = null;
+          while ((m = re.exec(ingredientsText)) !== null) {
+            const num = m[1];
+            const letter = m[2];
+            additiveCodes.push(letter ? `INS${num}(${letter.toUpperCase()})` : `INS${num}`);
+          }
+        }
+
+        const uniqueAdditives = Array.from(new Set(additiveCodes)).slice(0, 15);
+
+        const aiResponse = await getFoodAnalysis({
+          foodName: String(calculatedFood.name || "Unknown"),
+          nutrients: {
+            sugar: Number(calculatedFood.sugar) || 0,
+            sodium: Number(calculatedFood.sodium) || 0,
+            fat: Number(calculatedFood.fat) || 0,
+            calories: Number(calculatedFood.calories) || 0,
+          },
+          ingredients: ingredientsArr,
+          additives: uniqueAdditives,
+          userContext: profileData || {},
+        });
+
+        setFoodAnalysis(aiResponse);
       } catch (aiError) {
         console.warn("⚠️ AI Analysis error:", aiError);
-        setAiExplanation("Analysis not available");
+        setFoodAnalysis({
+          overallTag: "low risk",
+          overallSummary: "Analysis is temporarily unavailable. Review ingredients and portion size.",
+          additiveRiskAnalysis: [],
+          safePortion: { servingText: "1 serving", note: "If you are sensitive, choose a smaller portion." },
+        });
       }
 
     } catch (e) {
@@ -407,6 +444,10 @@ export default function ScanResultScreen({ route, navigation }: any) {
   const grade = result.decision === 'SAFE' ? 'A' : result.decision === 'WARNING' ? 'C' : 'E';
   const gradeColor = grade === 'A' ? COLORS.success : grade === 'C' ? COLORS.warning : COLORS.danger;
 
+  // Keep the legacy rendering below compiling (it referenced `aiExplanation` state),
+  // while the new UI uses `foodAnalysis` directly.
+  const aiExplanation = foodAnalysis?.overallSummary ?? "Generating health insights...";
+
   const ingredientsText = Array.isArray(food?.ingredients)
     ? food.ingredients.filter(Boolean).join(', ')
     : (food?.ingredients ? String(food.ingredients) : 'Ingredients not listed');
@@ -497,6 +538,187 @@ export default function ScanResultScreen({ route, navigation }: any) {
     { label: 'Trans Fat (g)', value: base?.transFat },
     { label: 'Sodium (mg)', value: base?.sodium },
   ];
+
+  // New screenshot-matching UI (legacy UI below is kept for now, but this early return renders instead).
+  const overallTag = foodAnalysis?.overallTag ?? "low risk";
+  const badgeBg =
+    overallTag === "safe" || overallTag === "low risk"
+      ? COLORS.primary
+      : overallTag === "moderate risk"
+        ? COLORS.risk_medium
+        : COLORS.risk_high;
+  const badgeText =
+    overallTag === "safe"
+      ? "Safe choice"
+      : overallTag === "low risk"
+        ? "Low risk"
+        : overallTag === "moderate risk"
+          ? "Moderate risk"
+          : "High risk";
+  const additiveOverallLabel =
+    overallTag === "safe" || overallTag === "low risk"
+      ? "Minimal Risk"
+      : overallTag === "moderate risk"
+        ? "Moderate Risk"
+        : "High Risk";
+
+  const safePortionText = foodAnalysis?.safePortion?.servingText ?? "";
+  const [portionMainRaw, portionUnitRaw] = safePortionText.includes("/")
+    ? safePortionText.split("/")
+    : [safePortionText, "serving"];
+  const portionMain = (portionMainRaw || "").trim().replace(/\s+/g, "");
+  const portionUnit = (portionUnitRaw || "serving").trim();
+
+  const displayAdditives = foodAnalysis?.additiveRiskAnalysis ?? [];
+
+  if (true) {
+    if (!foodAnalysis) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={{ marginTop: 10, color: COLORS.textSecondary, fontWeight: "700" }}>
+              Generating analysis...
+            </Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.newScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Top bar */}
+          <View style={styles.newTopBar}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.newBackBtn}>
+              <Ionicons name="chevron-back" size={20} color={COLORS.on_surface_variant} />
+            </TouchableOpacity>
+            <Text style={styles.newTopTitle}>Food Analysis</Text>
+            <View style={styles.newTopRight}>
+              <Ionicons name="sparkles" size={14} color={COLORS.primary} />
+              <Text style={styles.newBrandText}>NutriWise</Text>
+            </View>
+          </View>
+
+          {/* Product + badge */}
+          <View style={styles.newProductImageWrap}>
+            {!!food?.image ? (
+              <Image
+                source={{ uri: String(food.image) }}
+                style={styles.newProductImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.newProductImagePlaceholder} />
+            )}
+            <View style={[styles.newBadge, { backgroundColor: badgeBg }]}>
+              <Text style={styles.newBadgeText}>{badgeText}</Text>
+            </View>
+          </View>
+
+          {/* Meta */}
+          <View style={styles.newMeta}>
+            <View style={styles.newProfilePill}>
+              <Ionicons name="medical-outline" size={14} color={COLORS.primary} />
+              <Text style={styles.newProfilePillText}>KIDNEY HEALTH PROFILE</Text>
+            </View>
+
+            <Text style={styles.newProductTitle} numberOfLines={2}>
+              {food?.name || "Unknown Food"}
+            </Text>
+
+            <Text style={styles.newSummaryText}>
+              {foodAnalysis?.overallSummary ?? "Generating health insights..."}
+            </Text>
+          </View>
+
+          {/* Ideal proportion */}
+          <View style={styles.newCard}>
+            <View style={styles.newIdealHeader}>
+              <Ionicons name="leaf-outline" size={18} color={COLORS.primary} />
+              <Text style={styles.newIdealHeaderText}>Ideal Proportion to Consume</Text>
+            </View>
+
+            {foodAnalysis?.safePortion ? (
+              <View style={styles.newPortionRow}>
+                <Text style={styles.newPortionMain}>{portionMain || "1"}</Text>
+                <Text style={styles.newPortionUnit}>/ {portionUnit || "serving"}</Text>
+              </View>
+            ) : (
+              <Text style={styles.newHighRiskText}>Not recommended for you right now.</Text>
+            )}
+
+            {foodAnalysis?.safePortion?.note ? (
+              <Text style={styles.newIdealNote}>{foodAnalysis.safePortion.note}</Text>
+            ) : null}
+          </View>
+
+          {/* Additive risk analysis */}
+          <View style={styles.newAdditiveSection}>
+            <View style={styles.newSectionHeaderRow}>
+              <Text style={styles.newSectionHeader}>Additive Risk Analysis</Text>
+              <Text style={styles.newSectionHeaderRight}>{additiveOverallLabel}</Text>
+            </View>
+
+            {!foodAnalysis ? (
+              <View style={styles.newLoadingInline}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.newLoadingText}>Analyzing additives...</Text>
+              </View>
+            ) : displayAdditives.length === 0 ? (
+              <Text style={styles.newMutedText}>No additives detected for this product.</Text>
+            ) : (
+              <View style={styles.newAdditivesList}>
+                {displayAdditives.map((item, idx) => {
+                  const risk = item.risk;
+                  const riskColor = risk === "Low" ? COLORS.primary : risk === "Medium" ? COLORS.risk_medium : COLORS.risk_high;
+                  const riskIcon = risk === "Low" ? "checkmark-circle" : risk === "Medium" ? "alert-circle" : "alert-circle";
+                  const riskLabel = risk === "Low" ? "Low risk" : risk === "Medium" ? "Moderate risk" : "High risk";
+                  return (
+                    <View
+                      key={`${item.additive}-${idx}`}
+                      style={[styles.newAdditiveRow, { borderColor: riskColor }]}
+                    >
+                      <View style={[styles.newAdditiveIconWrap, { backgroundColor: riskColor }]}>
+                        <Ionicons name={riskIcon as any} size={16} color="#FFFFFF" />
+                      </View>
+                      <View style={styles.newAdditiveTextWrap}>
+                        <Text style={styles.newAdditiveTitle}>
+                          {getAdditiveInfo(item.additive).title || item.additive}
+                        </Text>
+                        <Text style={[styles.newAdditiveRiskText, { color: riskColor }]}>{riskLabel}</Text>
+                        <Text style={styles.newAdditiveDesc}>{item.consumingDescription}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {/* Alternatives (static layout; no weekly tracker per request) */}
+          <View style={styles.newAltSection}>
+            <Text style={styles.newSectionHeader}>Kidney-Friendly Alternatives</Text>
+            <View style={styles.newAltRow}>
+              <View style={styles.newAltCard}>
+                <View style={[styles.newAltImage, { backgroundColor: "#E7F0FF" }]} />
+                <Text style={styles.newAltTitle}>Tomato Basil</Text>
+                <Text style={styles.newAltSub}>Low sodium option</Text>
+              </View>
+              <View style={styles.newAltCard}>
+                <View style={[styles.newAltImage, { backgroundColor: "#E7FFEE" }]} />
+                <Text style={styles.newAltTitle}>Garden Veggie</Text>
+                <Text style={styles.newAltSub}>Kidney-friendly option</Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -725,6 +947,63 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.background },
   scrollContent: { padding: SPACING.l, paddingBottom: 120 },
+
+  // New screenshot-matching result UI
+  newScrollContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingBottom: 40,
+    backgroundColor: COLORS.background,
+  },
+  newTopBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, marginBottom: 14, position: "relative" },
+  newBackBtn: { padding: 6 },
+  newTopTitle: { fontSize: 14, fontWeight: "700", color: COLORS.on_surface, position: "absolute", left: 0, right: 0, textAlign: "center" },
+  newTopRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  newBrandText: { fontSize: 12, fontWeight: "800", color: COLORS.primary },
+
+  newProductImageWrap: { marginBottom: 14 },
+  newProductImagePlaceholder: { height: 160, borderRadius: 18, backgroundColor: "#D9D9D9", width: "100%" },
+  newProductImage: { height: 160, borderRadius: 18, width: "100%" },
+  newBadge: { position: "absolute", right: 18, bottom: 18, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  newBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+
+  newMeta: { marginTop: 2, marginBottom: 14 },
+  newProfilePill: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, alignSelf: "flex-start", backgroundColor: COLORS.surface_container_lowest },
+  newProfilePillText: { color: COLORS.primary, fontSize: 10, fontWeight: "800" },
+  newProductTitle: { marginTop: 10, color: COLORS.on_surface, fontSize: 16, fontWeight: "800" },
+  newSummaryText: { marginTop: 6, color: COLORS.textSecondary, fontSize: 11, lineHeight: 16, maxWidth: 340 },
+
+  newCard: { backgroundColor: COLORS.surface_container_lowest, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: "#E9E9E9", marginBottom: 14 },
+  newIdealHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  newIdealHeaderText: { fontSize: 13, fontWeight: "800", color: COLORS.on_surface },
+  newPortionRow: { flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 6 },
+  newPortionMain: { fontSize: 26, fontWeight: "900", color: COLORS.on_surface },
+  newPortionUnit: { fontSize: 13, fontWeight: "700", color: COLORS.textSecondary },
+  newIdealNote: { marginTop: 8, fontSize: 11, color: COLORS.textSecondary, lineHeight: 16 },
+  newHighRiskText: { marginTop: 4, fontSize: 12, color: COLORS.risk_high, fontWeight: "700" },
+
+  newAdditiveSection: { marginBottom: 12 },
+  newSectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingHorizontal: 2 },
+  newSectionHeader: { color: COLORS.on_surface, fontSize: 14, fontWeight: "900" },
+  newSectionHeaderRight: { color: COLORS.textSecondary, fontSize: 12, fontWeight: "800" },
+  newMutedText: { color: COLORS.textSecondary, fontSize: 12 },
+  newLoadingInline: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
+  newLoadingText: { color: COLORS.textSecondary, fontSize: 12 },
+
+  newAdditivesList: { gap: 10 },
+  newAdditiveRow: { flexDirection: "row", gap: 12, padding: 12, backgroundColor: COLORS.surface_container_lowest, borderRadius: 14, borderWidth: 1 },
+  newAdditiveIconWrap: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  newAdditiveTextWrap: { flex: 1 },
+  newAdditiveTitle: { fontSize: 12, color: COLORS.on_surface, fontWeight: "900", marginBottom: 2 },
+  newAdditiveRiskText: { fontSize: 11, fontWeight: "800" },
+  newAdditiveDesc: { marginTop: 6, fontSize: 11, lineHeight: 15, color: COLORS.textSecondary },
+
+  newAltSection: { marginTop: 4, paddingBottom: 30 },
+  newAltRow: { flexDirection: "row", gap: 12, marginTop: 10 },
+  newAltCard: { flex: 1, backgroundColor: COLORS.surface_container_lowest, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: "#E9E9E9" },
+  newAltImage: { height: 82, borderRadius: 12, marginBottom: 10 },
+  newAltTitle: { fontSize: 12, fontWeight: "900", color: COLORS.on_surface },
+  newAltSub: { marginTop: 4, fontSize: 10, fontWeight: "700", color: COLORS.textSecondary },
 
   card: { backgroundColor: COLORS.surface, borderRadius: 20, padding: SPACING.l, marginBottom: SPACING.l },
   productTopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },

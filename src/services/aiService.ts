@@ -4,90 +4,206 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY || "");
 
-export async function getFoodAnalysis(
-  foodName: string,
-  nutrients: any,
-  ingredients: string,
-  userProfile: any,
-  ruleDecision: string
-) {
+export type OverallTag = "safe" | "low risk" | "moderate risk" | "high risk";
+export type AdditiveRisk = "Low" | "Medium" | "High";
+
+export interface AdditiveRiskAnalysisItem {
+  additive: string;
+  risk: AdditiveRisk;
+  // Short description about what it means for the user to consume it.
+  consumingDescription: string;
+}
+
+export interface FoodAnalysisResponse {
+  overallTag: OverallTag;
+  overallSummary: string;
+  additiveRiskAnalysis: AdditiveRiskAnalysisItem[];
+  // Only present when overallTag is not "high risk".
+  safePortion: { servingText: string; note?: string } | null;
+}
+
+function safeToArray(input: unknown): string[] {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    return input
+      .map((x) => String(x).trim())
+      .filter((x) => x.length > 0);
+  }
+  const asString = String(input);
+  return asString
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function extractJsonObject(text: string): any | null {
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return null;
+  const candidate = text.slice(firstBrace, lastBrace + 1);
   try {
-    // Use the pinned stable model version
+    return JSON.parse(candidate);
+  } catch {
+    return null;
+  }
+}
+
+export async function getFoodAnalysis(params: {
+  ingredients: string[] | string;
+  additives: string[] | string;
+  nutrients: {
+    sugar?: number;
+    sodium?: number;
+    fat?: number;
+    calories?: number;
+    [key: string]: any;
+  };
+  userContext: any;
+  foodName?: string;
+}): Promise<FoodAnalysisResponse> {
+  const { ingredients, additives, nutrients, userContext, foodName } = params;
+
+  try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // 1. Context (Keep data precise, but ask for simple output)
-    const safeJoin = (arr: any, fallback: string) => {
-      if (!Array.isArray(arr) || arr.length === 0) return fallback;
-      const cleaned = arr
-        .filter(Boolean)
-        .map((x: any) => String(x).trim())
-        .filter((x: string) => x.length > 0);
-      return cleaned.length > 0 ? cleaned.join(", ") : fallback;
+    const ingredientsArr = safeToArray(ingredients);
+    const additivesArr = safeToArray(additives);
+
+    const conditions = safeToArray(userContext?.diseases).join(", ") || "None";
+    const allergies = safeToArray(userContext?.allergies).join(", ") || "None";
+    const goals = safeToArray(userContext?.healthGoals).join(", ") || "None";
+
+    const userProfileBlock = {
+      age: userContext?.age ?? "Unknown",
+      gender: userContext?.gender ?? "Unknown",
+      bmi: userContext?.bmi ?? "Unknown",
+      activityLevel: userContext?.activityLevel ?? "Unknown",
+      dietPattern: userContext?.diet?.pattern ?? "Unknown",
+      conditions,
+      allergies,
+      medicationOn: userContext?.medication?.onMedication ?? "Unknown",
+      medicationCategories: safeToArray(userContext?.medication?.categories).join(", ") || "None",
+      goals,
     };
 
-    const conditions = safeJoin(userProfile?.diseases, "None");
-    const allergies = safeJoin(userProfile?.allergies, "None");
-    const goals = safeJoin(userProfile?.healthGoals, "None");
-
-    const gender = userProfile?.gender ? String(userProfile.gender) : "Unknown";
-    const activity = userProfile?.activityLevel ? String(userProfile.activityLevel) : "Unknown";
-    const dietPattern = userProfile?.diet?.pattern ? String(userProfile.diet.pattern) : "Unknown";
-
-    const onMeds = userProfile?.medication?.onMedication ? String(userProfile.medication.onMedication) : "Unknown";
-    const medCats = safeJoin(userProfile?.medication?.categories, "None");
-
-    const userAge = userProfile?.age ?? "Unknown";
-    const userBmi = userProfile?.bmi ?? "Unknown";
-
-    const userContext = `User Profile:
-    - Age: ${userAge}
-    - Gender: ${gender}
-    - BMI: ${userBmi}
-    - Activity: ${activity}
-    - Diet: ${dietPattern}
-    - Conditions: ${conditions}
-    - Allergies/Sensitivities: ${allergies}
-    - Medication: ${onMeds} (Categories: ${medCats})
-    - Goals: ${goals}
-    `;
-    
-    const foodContext = `
-    Food: ${foodName}
-    Stats: Sugar ${nutrients.sugar}g, Sodium ${nutrients.sodium}mg, Fat ${nutrients.fat}g, Calories ${nutrients.calories}
-    Ingredients: ${ingredients}
-    `;
-
-    // 2. The Simplified Prompt
     const prompt = `
-    You are a helpful nutrition coach. Analyze this food for the user.
+You are NutriWise, a safety-focused nutrition coach.
+Return ONLY valid JSON (no markdown, no code block, no surrounding text).
 
-    INPUT:
-    ${userContext}
-    ${foodContext}
-    System Flag: ${ruleDecision}
+INPUT
+FoodName: ${foodName ?? "Unknown food"}
+Nutrients (per chosen serving): ${JSON.stringify(nutrients)}
+Ingredients (if available): ${JSON.stringify(ingredientsArr.slice(0, 30))}
+Additives (if available): ${JSON.stringify(additivesArr.slice(0, 15))}
+UserContext: ${JSON.stringify(userProfileBlock)}
 
-    ### 1. How it affects you
-    - Explain simply how the Sugar, Salt, or Fat affects THIS specific user (e.g., "High sugar is risky for your Diabetes").
-    - Mention if the calories are too high for their BMI.
+TASK
+1) For each item in "Additives", provide:
+   - "risk": one of "Low" | "Medium" | "High"
+   - "consumingDescription": short (<= 20 words) user-specific note about what it could mean to consume.
 
-    ### 2. What's inside?
-    - Point out any bad additives or chemicals in simple terms.
-    - Mention if ingredients are generally considered unsafe or unhealthy in India.
-    - If any ingredient conflicts with the user's allergies/sensitivities, clearly warn.
+2) Provide "overallSummary": short (<= 35 words) on how the product could affect the user.
 
-    ### 3. Verification & Advice
-    - Give a clear verdict: Is it safe to eat daily, weekly, or rarely?
-    - Suggest a quick tip (e.g., "Drink water with this" or "Eat only half").
+3) Provide "overallTag": one of
+   - "safe" | "low risk" | "moderate risk" | "high risk"
 
-    Keep the entire response under 150 words.
-    `;
+   Use:
+   - "high risk" if any additive is High risk OR the product likely conflicts strongly with conditions/allergies (especially kidney/diabetes/hypertension).
+   - "moderate risk" if there are Medium additives or mildly elevated sugar/sodium/fat for the user.
+   - "low risk" if additives are mostly Low and nutrients look generally okay.
+   - "safe" only if everything looks Low-safe for the user.
+
+4) "safePortion":
+   - If overallTag is NOT "high risk", set safePortion to an object with:
+     - "servingText": safe portion to eat, e.g., "1 cup / serving", "1 bowl / serving", or "100 g / serving"
+     - "note" (optional): <= 20 words.
+   - If overallTag is "high risk", set safePortion to null.
+
+RESPONSE SHAPE
+{
+  "overallTag": "safe" | "low risk" | "moderate risk" | "high risk",
+  "overallSummary": string,
+  "additiveRiskAnalysis": [
+     { "additive": string, "risk": "Low"|"Medium"|"High", "consumingDescription": string }
+  ],
+  "safePortion": { "servingText": string, "note"?: string } | null
+}
+`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text();
-    
+    const text = response.text();
+
+    const parsed = extractJsonObject(text);
+    if (!parsed) {
+      // Minimal fallback so UI never crashes.
+      return {
+        overallTag: "low risk",
+        overallSummary: "Analysis is temporarily unavailable. Please review ingredients and portion sizes.",
+        additiveRiskAnalysis: additivesArr.map((a) => ({
+          additive: a,
+          risk: "Low",
+          consumingDescription: "Likely low concern, but keep an eye on your individual sensitivities.",
+        })),
+        safePortion: {
+          servingText: "1 serving",
+          note: "Start with a smaller portion if you are sensitive.",
+        },
+      };
+    }
+
+    // Soft validation / coercion
+    const overallTag: OverallTag =
+      parsed.overallTag === "safe" ||
+      parsed.overallTag === "low risk" ||
+      parsed.overallTag === "moderate risk" ||
+      parsed.overallTag === "high risk"
+        ? parsed.overallTag
+        : "low risk";
+
+    const additiveRiskAnalysis: AdditiveRiskAnalysisItem[] = Array.isArray(parsed.additiveRiskAnalysis)
+      ? parsed.additiveRiskAnalysis
+          .slice(0, 20)
+          .map((x: any) => ({
+            additive: String(x?.additive ?? ""),
+            risk: x?.risk === "High" ? "High" : x?.risk === "Medium" ? "Medium" : "Low",
+            consumingDescription: String(x?.consumingDescription ?? "").trim() || "Minor concern for most people.",
+          }))
+          .filter((x: any) => x.additive.length > 0)
+      : [];
+
+    const safePortion =
+      overallTag === "high risk"
+        ? null
+        : parsed.safePortion && typeof parsed.safePortion === "object"
+          ? {
+              servingText: String(parsed.safePortion.servingText ?? "1 serving"),
+              note: parsed.safePortion.note ? String(parsed.safePortion.note) : undefined,
+            }
+          : {
+              servingText: "1 serving",
+            };
+
+    return {
+      overallTag,
+      overallSummary: String(parsed.overallSummary ?? "").trim() || "General guidance based on your profile.",
+      additiveRiskAnalysis,
+      safePortion,
+    };
   } catch (error) {
     console.error("AI Error:", error);
-    return "Could not generate analysis. Please check your internet.";
+    return {
+      overallTag: "low risk",
+      overallSummary: "Could not generate analysis. Please check your internet connection and try again.",
+      additiveRiskAnalysis: safeToArray(additives).map((a) => ({
+        additive: a,
+        risk: "Low",
+        consumingDescription: "Analysis unavailable; consider limiting processed foods and additives.",
+      })),
+      safePortion: {
+        servingText: "1 serving",
+        note: "If you are sensitive, try a smaller portion first.",
+      },
+    };
   }
 }
