@@ -12,9 +12,9 @@ import { getHistory, getFoodsByDate, deleteFoodItem } from '../services/firebase
 import { DailySummary, FoodItem } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// Subtract horizontal padding (SPACING.l * 2) and account for 7 x 1px cell borders
+// Subtract horizontal padding (SPACING.l * 2) and account for 2px outer calendarGrid borders
 const CALENDAR_WIDTH = SCREEN_WIDTH - SPACING.l * 2;
-const DAY_CELL_WIDTH = Math.floor(CALENDAR_WIDTH / 7);
+const DAY_CELL_WIDTH = (CALENDAR_WIDTH - 2.1) / 7; // .1 buffer for sub-pixel flexWrap edge cases
 
 // ─────────────────────────────────────────────
 // Types
