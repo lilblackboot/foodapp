@@ -58,6 +58,35 @@ function extractJsonObject(text: string): any | null {
   }
 }
 
+// Robust fallback engine to cycle through models in case of 503 / 429 errors
+async function generateContentWithFallback(prompt: string, modelsToTry: string[], tools?: any[]) {
+  let lastError: any;
+
+  for (const modelName of modelsToTry) {
+    try {
+      const config: any = { model: modelName };
+      if (tools) {
+        config.tools = tools;
+      }
+
+      const model = genAI.getGenerativeModel(config);
+      console.log(`[AI Fallback] Attempting model: ${modelName}`);
+
+      const result = await model.generateContent(prompt);
+      return result; // If successful, return instantly to escape the loop
+
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`[AI Fallback] Model ${modelName} failed:`, error?.message || error);
+      // Wait roughly 1 sec before hammering the API on the next model
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
+  // If it completely exhausted the list without returning
+  throw new Error(`All fallback models failed. Last Error: ${lastError?.message || String(lastError)}`);
+}
+
 export async function getFoodAnalysis(params: {
   ingredients: string[] | string;
   additives: string[] | string;
@@ -74,7 +103,13 @@ export async function getFoodAnalysis(params: {
   const { ingredients, additives, nutrients, userContext, foodName } = params;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    // We prioritize 2.5 flash, fallback to variants that share the same free tier caps
+    const FALLBACK_MODELS = [
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.0-flash"
+    ];
 
     const ingredientsArr = safeToArray(ingredients);
     const additivesArr = safeToArray(additives);
@@ -151,7 +186,7 @@ RESPONSE SHAPE
 }
 `;
 
-    const result = await model.generateContent(prompt);
+    const result = await generateContentWithFallback(prompt, FALLBACK_MODELS);
     const response = await result.response;
     const text = response.text();
 
@@ -177,33 +212,33 @@ RESPONSE SHAPE
     // Soft validation / coercion
     const overallTag: OverallTag =
       parsed.overallTag === "safe" ||
-      parsed.overallTag === "low risk" ||
-      parsed.overallTag === "moderate risk" ||
-      parsed.overallTag === "high risk"
+        parsed.overallTag === "low risk" ||
+        parsed.overallTag === "moderate risk" ||
+        parsed.overallTag === "high risk"
         ? parsed.overallTag
         : "low risk";
 
     const additiveRiskAnalysis: AdditiveRiskAnalysisItem[] = Array.isArray(parsed.additiveRiskAnalysis)
       ? parsed.additiveRiskAnalysis
-          .slice(0, 20)
-          .map((x: any) => ({
-            additive: String(x?.additive ?? ""),
-            risk: x?.risk === "High" ? "High" : x?.risk === "Medium" ? "Medium" : "Low",
-            consumingDescription: String(x?.consumingDescription ?? "").trim() || "Minor concern for most people.",
-          }))
-          .filter((x: any) => x.additive.length > 0)
+        .slice(0, 20)
+        .map((x: any) => ({
+          additive: String(x?.additive ?? ""),
+          risk: x?.risk === "High" ? "High" : x?.risk === "Medium" ? "Medium" : "Low",
+          consumingDescription: String(x?.consumingDescription ?? "").trim() || "Minor concern for most people.",
+        }))
+        .filter((x: any) => x.additive.length > 0)
       : [];
 
     const nutritionalRiskAnalysis: NutritionalRiskAnalysisItem[] = Array.isArray(parsed.nutritionalRiskAnalysis)
       ? parsed.nutritionalRiskAnalysis
-          .slice(0, 10)
-          .map((x: any) => ({
-            nutrient: String(x?.nutrient ?? ""),
-            amount: String(x?.amount ?? ""),
-            risk: x?.risk === "High" ? "High" : x?.risk === "Adequate" ? "Adequate" : "Low",
-            consumingDescription: String(x?.consumingDescription ?? "").trim() || "Generally safe.",
-          }))
-          .filter((x: any) => x.nutrient.length > 0)
+        .slice(0, 10)
+        .map((x: any) => ({
+          nutrient: String(x?.nutrient ?? ""),
+          amount: String(x?.amount ?? ""),
+          risk: x?.risk === "High" ? "High" : x?.risk === "Adequate" ? "Adequate" : "Low",
+          consumingDescription: String(x?.consumingDescription ?? "").trim() || "Generally safe.",
+        }))
+        .filter((x: any) => x.nutrient.length > 0)
       : [];
 
     const safePortion =
@@ -211,12 +246,12 @@ RESPONSE SHAPE
         ? null
         : parsed.safePortion && typeof parsed.safePortion === "object"
           ? {
-              servingText: String(parsed.safePortion.servingText ?? "1 serving"),
-              note: parsed.safePortion.note ? String(parsed.safePortion.note) : undefined,
-            }
+            servingText: String(parsed.safePortion.servingText ?? "1 serving"),
+            note: parsed.safePortion.note ? String(parsed.safePortion.note) : undefined,
+          }
           : {
-              servingText: "1 serving",
-            };
+            servingText: "1 serving",
+          };
 
     return {
       overallTag,
@@ -241,5 +276,94 @@ RESPONSE SHAPE
         note: "If you are sensitive, try a smaller portion first.",
       },
     };
+  }
+}
+
+export interface FallbackProductResponse {
+  name: string;
+  brand: string;
+  image: string | null;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  sugar: number;
+  sodium: number;
+  serving_size: string;
+  ingredients: string;
+}
+
+export async function findProductByBarcodeFallback(barcode: string): Promise<FallbackProductResponse | null> {
+  try {
+    // Models listed that uniquely support Google Search Grounding natively:
+    const BARCODE_FALLBACK_MODELS = [
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash"
+    ];
+
+    const searchTools = [
+      {
+        googleSearchRetrieval: {
+          dynamicRetrievalConfig: {
+            mode: "MODE_DYNAMIC",
+            dynamicThreshold: 0.3,
+          },
+        },
+      } as any,
+    ];
+    const prompt = `
+You are a highly capable nutrition and product research assistant.
+Your task is to find the extremely accurate nutritional details of a grocery product based mostly on its barcode.
+Follow this 2-step process mentally:
+1. Search the web using the barcode "${barcode}" to find out the exact Product Name and Brand. If you can't find it, guess the closest likely product if it corresponds to an EAN/UPC but prioritize real Indian grocery sites like Blinkit, BigBasket, Swiggy Instamart, Zepto.
+2. Once you have the exact product name, perform a detailed search to find its precise nutritional info per 100g (or the standard serving size listed) and its primary ingredients. Also, locate a direct image URL (jpg/png) for this product from an e-commerce site.
+
+Return ONLY a valid JSON object (no markdown, no surrounding text) with the following exact keys:
+{
+  "name": "Exact Name of the Product",
+  "brand": "Brand Name",
+  "image": "https://direct-url-to-image.jpg or null",
+  "calories": number (in kcal per 100g or per serving size),
+  "protein": number (in grams),
+  "carbs": number (in grams),
+  "fat": number (in grams),
+  "sugar": number (in grams),
+  "sodium": number (in mg),
+  "serving_size": "100g or the retrieved serving size string",
+  "ingredients": "Comma separated string of ingredients. E.g. 'Wheat, Sugar, Salt...'"
+}
+
+Ensure numeric fields like calories, protein, carbs, fat, sugar, and sodium only contain the number (e.g., 250). Provide 0 if a nutrient is definitively zero.
+`;
+
+    const result = await generateContentWithFallback(prompt, BARCODE_FALLBACK_MODELS, searchTools);
+    const text = result.response.text();
+
+    // Minimal JSON extraction
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return null;
+    const candidate = text.slice(firstBrace, lastBrace + 1);
+
+    const parsed = JSON.parse(candidate) as Partial<FallbackProductResponse>;
+    if (!parsed || !parsed.name) return null;
+
+    return {
+      name: parsed.name || "Unknown Product",
+      brand: parsed.brand || "Generic",
+      image: parsed.image || null,
+      calories: Number(parsed.calories) || 0,
+      protein: Number(parsed.protein) || 0,
+      carbs: Number(parsed.carbs) || 0,
+      fat: Number(parsed.fat) || 0,
+      sugar: Number(parsed.sugar) || 0,
+      sodium: Number(parsed.sodium) || 0,
+      serving_size: parsed.serving_size ? String(parsed.serving_size) : "100g",
+      ingredients: parsed.ingredients ? String(parsed.ingredients) : "Ingredients not listed",
+    };
+  } catch (error) {
+    console.error("Error in findProductByBarcodeFallback:", error);
+    return null;
   }
 }

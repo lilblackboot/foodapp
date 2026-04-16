@@ -1,6 +1,6 @@
 import { 
   getFirestore, collection, doc, writeBatch, increment, 
-  getDocs, query, where, orderBy, DocumentData 
+  getDocs, getDoc, query, where, orderBy, DocumentData 
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { app } from './firebaseConfig'; 
@@ -73,10 +73,16 @@ export const getFoodsByDate = async (date: string): Promise<FoodItem[]> => {
 // 3. DELETE FOOD (Removes Log AND Subtracts from Summary)
 export const deleteFoodItem = async (foodId: string, date: string, foodDetails: FoodItem): Promise<void> => {
   const uid = getUserId();
+  
+  const logRef = doc(db, 'users', uid, 'food_logs', foodId);
+  const snap = await getDoc(logRef);
+  
+  // Prevent double-deletions from dragging exactly the summary to negative
+  if (!snap.exists()) return;
+
   const batch = writeBatch(db);
 
   // A. Delete the log
-  const logRef = doc(db, 'users', uid, 'food_logs', foodId);
   batch.delete(logRef);
 
   // B. Subtract from Summary

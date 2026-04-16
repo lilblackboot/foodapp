@@ -271,7 +271,7 @@ export default function HistoryScreen({ navigation }: any) {
               {daySummary && (
                 <View style={styles.headerMacros}>
                   <Text style={styles.totalCalText}>
-                    {Math.round(daySummary.totalCalories)}{' '}
+                    {Math.max(0, Math.round(daySummary.totalCalories))}{' '}
                     <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>kcal</Text>
                   </Text>
                 </View>

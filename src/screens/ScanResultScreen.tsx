@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, ScrollView, TextInput, Modal, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebaseConfig';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { evaluateFood, EvaluationResult } from '../logic/RuleEngine';
-import { FoodAnalysisResponse, getFoodAnalysis } from '../services/aiService';
+import { FoodAnalysisResponse, getFoodAnalysis, findProductByBarcodeFallback } from '../services/aiService';
 
 // [NEW] Import the new helper and types
 import { logFoodItem } from '../services/firebaseHelper';
@@ -14,25 +14,26 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function ScanResultScreen({ route, navigation }: any) {
   const { barcode, fromRecipe, recipeName, recipeNutrition, recipeBreakdown, foodLog } = route.params || {};
-  
+
   // Check if this is a recipe scan or barcode scan or viewing from history
   const isRecipe = fromRecipe === true;
   const isHistoryView = !!foodLog;
-  
+
   // Steps: 'loading' -> 'input' (ask grams) -> 'result' (show analysis)
   // For recipes and history, skip input and go straight to result
   const [step, setStep] = useState<'loading' | 'input' | 'result'>(fromRecipe || isHistoryView ? 'result' : 'loading');
-  
+
   // Data State
   const [baseFood, setBaseFood] = useState<any>(null); // The raw 100g data
   const [food, setFood] = useState<any>(null);         // The calculated portion data
   const [portionSize, setPortionSize] = useState('100'); // User input string
-  
+
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const [foodAnalysis, setFoodAnalysis] = useState<FoodAnalysisResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisFailed, setAnalysisFailed] = useState(false);
-  
+  const [isAISearching, setIsAISearching] = useState(false);
+
   // Edit name state
   const [editNameModalVisible, setEditNameModalVisible] = useState(false);
   const [editedName, setEditedName] = useState('');
@@ -42,7 +43,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
   const [additiveInfoVisible, setAdditiveInfoVisible] = useState(false);
   const [selectedAdditive, setSelectedAdditive] = useState<string | null>(null);
-  
+
   const [newNutritionModalVisible, setNewNutritionModalVisible] = useState(false);
 
   useEffect(() => {
@@ -51,7 +52,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
       setFood(foodLog);
       setPortionSize(foodLog.serving_size ? String(foodLog.serving_size) : '100');
       setEditedName(foodLog.name);
-      
+
       // Load previous result & analysis
       setResult(foodLog.evaluationResult || {
         decision: 'SAFE',
@@ -75,12 +76,12 @@ export default function ScanResultScreen({ route, navigation }: any) {
         ingredients: recipeBreakdown?.map((ing: any) => ing.name).join(', ') || 'Mixed ingredients',
         servingSize: '1 serving'
       };
-      
+
       setBaseFood(recipeFood);
       setFood(recipeFood);
       setPortionSize('1');
       setEditedName(recipeFood.name);
-      
+
       // Skip to result with default "SAFE" decision for recipes
       setResult(({
         decision: 'SAFE',
@@ -105,7 +106,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
       navigation.goBack();
     }
   }, []);
-  
+
   // 1. FETCH RAW DATA (3-Layer Lookup: Firebase → OpenFoodFacts → Manual)
   const fetchBaseData = async () => {
     try {
@@ -140,7 +141,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
           `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`,
           ({ timeout: 10000 } as any)
         );
-        
+
         if (!response.ok) {
           throw new Error(`API returned ${response.status}`);
         }
@@ -149,12 +150,12 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
         if (apiData && apiData.status === 1 && apiData.product) {
           const product = apiData.product;
-          
+
           // Safely extract nutrition data
           const nutriments = product.nutriments || {};
-          
+
           // Validate that product has minimum nutrition data
-          const hasNutritionData = 
+          const hasNutritionData =
             nutriments['energy-kcal_100g'] !== undefined ||
             nutriments.sugars_100g !== undefined ||
             nutriments.salt_100g !== undefined ||
@@ -181,6 +182,22 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
             setBaseFood(foundData);
             setStep('input');
+            
+            // Cache the OpenFoodFacts data back to our global 'food_items' database
+            try {
+              const user = auth.currentUser;
+              const docData = {
+                ...foundData,
+                name_lower: foundData.name ? foundData.name.toLowerCase() : "",
+                userId: user ? user.uid : "system",
+                source: "openfoodfacts",
+                createdAt: new Date().toISOString()
+              };
+              await setDoc(doc(db, "food_items", barcode), docData);
+            } catch (dbErr) {
+              console.error("Failed to cache OFF data back to global DB", dbErr);
+            }
+
             return;
           }
         }
@@ -188,7 +205,51 @@ export default function ScanResultScreen({ route, navigation }: any) {
         console.warn("OpenFoodFacts API error:", apiError);
       }
 
-      // LAYER 3: Product not found - offer options
+      // LAYER 3: Product not found locally or reliably on OFF - fallback to Gemini Internet Search
+      try {
+        setIsAISearching(true);
+        const fallbackData = await findProductByBarcodeFallback(barcode);
+        if (fallbackData) {
+          foundData = {
+            name: fallbackData.name,
+            brand: fallbackData.brand,
+            calories: fallbackData.calories,
+            protein: fallbackData.protein,
+            carbs: fallbackData.carbs,
+            fat: fallbackData.fat,
+            sugar: fallbackData.sugar,
+            sodium: fallbackData.sodium,
+            ingredients: fallbackData.ingredients,
+            image: fallbackData.image,
+            servingSize: fallbackData.serving_size,
+          };
+
+          setBaseFood(foundData);
+          setStep('input');
+          // Cache the AI fetched data back to your global 'food_items' database
+          try {
+            const user = auth.currentUser;
+            const docData = {
+              ...foundData,
+              name_lower: foundData.name ? foundData.name.toLowerCase() : "",
+              userId: user ? user.uid : "system",
+              source: "ai_fallback",
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(doc(db, "food_items", barcode), docData);
+          } catch (dbErr) {
+            console.error("Failed to cache AI data back to global DB", dbErr);
+          }
+
+          return;
+        }
+      } catch (fallbackError) {
+        console.warn("Gemini Fallback Search failed:", fallbackError);
+      } finally {
+        setIsAISearching(false);
+      }
+
+      // LAYER 4: Product absolutely not found - offer options
       showProductNotFoundOptions();
 
     } catch (error) {
@@ -251,18 +312,18 @@ export default function ScanResultScreen({ route, navigation }: any) {
         fat: (baseFood.fat || 0) * ratio,
         carbs: (baseFood.carbs || 0) * ratio,
         protein: (baseFood.protein || 0) * ratio,
-        portionLogged: grams 
+        portionLogged: grams
       };
 
       setFood(calculatedFood);
 
       const profileSnap = await getDoc(doc(db, "user_profiles", user.uid));
       const profileData = profileSnap.exists() ? profileSnap.data() : {};
-      const _d1 = new Date(); const today = `${_d1.getFullYear()}-${String(_d1.getMonth()+1).padStart(2,'0')}-${String(_d1.getDate()).padStart(2,'0')}`;
+      const _d1 = new Date(); const today = `${_d1.getFullYear()}-${String(_d1.getMonth() + 1).padStart(2, '0')}-${String(_d1.getDate()).padStart(2, '0')}`;
       const intakeSnap = await getDoc(doc(db, "daily_intake", `${user.uid}_${today}`));
       const intakeData = intakeSnap.exists() ? intakeSnap.data() : {};
 
-      const decisionResult = evaluateFood(calculatedFood, profileData, intakeData); 
+      const decisionResult = evaluateFood(calculatedFood, profileData, intakeData);
       setResult(decisionResult);
       setStep('result');
 
@@ -270,9 +331,9 @@ export default function ScanResultScreen({ route, navigation }: any) {
         const ingredientsText = String(calculatedFood?.ingredients || "");
         const ingredientsArr = ingredientsText
           ? ingredientsText
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
           : [];
 
         // Extract common INS codes from the ingredients text (e.g., INS 635, INS451(i))
@@ -344,16 +405,16 @@ export default function ScanResultScreen({ route, navigation }: any) {
         foodAnalysis,
         evaluationResult: result,
       };
-      
-      const _d2 = new Date(); const todayDate = `${_d2.getFullYear()}-${String(_d2.getMonth()+1).padStart(2,'0')}-${String(_d2.getDate()).padStart(2,'0')}`;
+
+      const _d2 = new Date(); const todayDate = `${_d2.getFullYear()}-${String(_d2.getMonth() + 1).padStart(2, '0')}-${String(_d2.getDate()).padStart(2, '0')}`;
 
       // Call the new helper function
       await logFoodItem(itemToLog, todayDate);
 
       Alert.alert("Logged!", `${Math.round(food.calories)} kcal added.`);
-      
+
       // Navigate back to Home and it will auto-refresh
-      navigation.navigate('Home'); 
+      navigation.navigate('Home');
 
     } catch (e) {
       console.error(e);
@@ -405,7 +466,16 @@ export default function ScanResultScreen({ route, navigation }: any) {
   };
 
   if (step === 'loading') {
-    return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.surface }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        {isAISearching && (
+          <Text style={{ marginTop: 16, color: COLORS.textSecondary, fontFamily: FONTS.body, fontSize: 16 }}>
+            Searching the web for product details...
+          </Text>
+        )}
+      </View>
+    );
   }
 
   // INPUT SCREEN
@@ -417,7 +487,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
         </View>
       );
     }
-    
+
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.inputContainer}>
@@ -426,7 +496,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
           <Text style={styles.brand}>{baseFood.brand || "Generic"}</Text>
 
           <View style={styles.inputBox}>
-            <TextInput 
+            <TextInput
               style={styles.gramInput}
               value={portionSize}
               onChangeText={setPortionSize}
@@ -435,11 +505,11 @@ export default function ScanResultScreen({ route, navigation }: any) {
             />
             <Text style={styles.unit}>grams</Text>
           </View>
-          
+
           <Text style={styles.hint}>Standard serving: {baseFood.servingSize || "100g"}</Text>
 
           <TouchableOpacity style={styles.mainBtn} onPress={handleAnalyze} disabled={isAnalyzing}>
-            {isAnalyzing ? <ActivityIndicator color="#000"/> : <Text style={styles.btnText}>Analyze Health Impact</Text>}
+            {isAnalyzing ? <ActivityIndicator color="#000" /> : <Text style={styles.btnText}>Analyze Health Impact</Text>}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -455,8 +525,8 @@ export default function ScanResultScreen({ route, navigation }: any) {
     );
   }
 
-  const statusColor = result.decision === "SAFE" ? COLORS.success : 
-                      result.decision === "WARNING" ? COLORS.warning : COLORS.danger;
+  const statusColor = result.decision === "SAFE" ? COLORS.success :
+    result.decision === "WARNING" ? COLORS.warning : COLORS.danger;
 
   const grade = result.decision === 'SAFE' ? 'A' : result.decision === 'WARNING' ? 'C' : 'E';
   const gradeColor = grade === 'A' ? COLORS.success : grade === 'C' ? COLORS.warning : COLORS.danger;
@@ -658,7 +728,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
             ) : (
               <View style={styles.newProductImagePlaceholder} />
             )}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.newNutritionInfoBtn}
               activeOpacity={0.8}
               onPress={() => setNewNutritionModalVisible(true)}
@@ -818,11 +888,11 @@ export default function ScanResultScreen({ route, navigation }: any) {
               </View>
               <View>
                 {nutrientsRows.filter(r => r.value !== undefined && r.value !== null && !Number.isNaN(Number(r.value))).map((row, idx, arr) => {
-                  const display = (row.label.includes('(kcal)') || row.label.includes('(mg)')) 
-                    ? String(Math.round(Number(row.value))) 
+                  const display = (row.label.includes('(kcal)') || row.label.includes('(mg)'))
+                    ? String(Math.round(Number(row.value)))
                     : String(Number(row.value).toFixed(1));
                   const isLast = idx === arr.length - 1;
-                  
+
                   return (
                     <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: isLast ? 0 : 1, borderBottomColor: '#F0F0F0' }}>
                       <Text style={{ color: COLORS.textSecondary, fontSize: 13 }}>{row.label}</Text>
@@ -855,7 +925,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
-        
+
         {/* HEADER CARD WITH MACROS GRID */}
         <View style={styles.card}>
           <View style={styles.productTopRow}>
@@ -881,14 +951,14 @@ export default function ScanResultScreen({ route, navigation }: any) {
               <Text style={styles.quantityText}>{String(food?.servingSize || food?.serving_size || portionSize)}{String(food?.servingSize || food?.serving_size || '').toLowerCase().includes('g') ? '' : ' g'}</Text>
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.editNameBtn}
               onPress={() => {
                 setEditedName(food.name);
                 setEditNameModalVisible(true);
               }}
             >
-              <Text style={{fontSize: 16, color: COLORS.primary}}>✏️</Text>
+              <Text style={{ fontSize: 16, color: COLORS.primary }}>✏️</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -916,8 +986,8 @@ export default function ScanResultScreen({ route, navigation }: any) {
             <View style={styles.aiBox}>
               <Text style={styles.aiLabel}>✨ Smart Analysis</Text>
               {renderSmartAnalysis(
-                (aiExplanation && aiExplanation !== "Generating health insights..." 
-                  ? aiExplanation 
+                (aiExplanation && aiExplanation !== "Generating health insights..."
+                  ? aiExplanation
                   : (result?.reason || "Analyzing...") + "\n\n" + aiExplanation) || "Analysis not available"
               )}
             </View>
@@ -1096,7 +1166,7 @@ const styles = StyleSheet.create({
   newBadge: { position: "absolute", right: 18, bottom: 18, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   newBadgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
 
-  newNutritionInfoBtn: { position: "absolute", top: 12, right: 12, backgroundColor: "#FFFFFF", padding: 4, borderRadius: 20, elevation: 4, shadowColor: "#000", shadowOffset: {width:0, height:2}, shadowOpacity: 0.2, shadowRadius: 4 },
+  newNutritionInfoBtn: { position: "absolute", top: 12, right: 12, backgroundColor: "#FFFFFF", padding: 4, borderRadius: 20, elevation: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
   newModalCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 24, width: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
 
   newMeta: { marginTop: 4, marginBottom: 20 },
