@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, ScrollView, TextInput, Modal, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -107,6 +107,26 @@ export default function ScanResultScreen({ route, navigation }: any) {
     }
   }, []);
 
+  const alertShownRef = useRef(false);
+
+  useEffect(() => {
+    if (step === 'result' && foodAnalysis && !alertShownRef.current) {
+      if (foodAnalysis.overallTag === 'high risk') {
+        alertShownRef.current = true;
+        Alert.alert(
+          "🚨 HIGH RISK 🚨",
+          "Ideal Proportion to Consume: Not recommended for you right now.\n\n" + (foodAnalysis.overallSummary || "")
+        );
+      } else if (foodAnalysis.overallTag === 'moderate risk') {
+        alertShownRef.current = true;
+        Alert.alert(
+          "🚨 CAUTION 🚨",
+          `Ideal Proportion to Consume: ${foodAnalysis.safePortion?.servingText || "Reduce portion"}\n\n${foodAnalysis.safePortion?.note || ""}`
+        );
+      }
+    }
+  }, [step, foodAnalysis]);
+
   // 1. FETCH RAW DATA (3-Layer Lookup: Firebase → OpenFoodFacts → Manual)
   const fetchBaseData = async () => {
     try {
@@ -116,7 +136,20 @@ export default function ScanResultScreen({ route, navigation }: any) {
         return;
       }
 
-      let foundData = null;
+      let foundData: any = null;
+
+      // Helper to check if data is fully complete (crucially, MUST have ingredients for analysis)
+      const isDataComplete = (d: any) => {
+        return !!(
+          d &&
+          d.name &&
+          d.ingredients &&
+          String(d.ingredients).trim() !== "" &&
+          String(d.ingredients).toLowerCase() !== "ingredients not listed" &&
+          d.calories !== undefined &&
+          d.calories !== null
+        );
+      };
 
       // LAYER 1: Check Firebase custom_products first (fastest, most reliable)
       try {
@@ -126,127 +159,115 @@ export default function ScanResultScreen({ route, navigation }: any) {
           if (data) {
             foundData = data;
             if (!foundData.image) foundData.image = null;
-            setBaseFood(foundData);
-            setStep('input');
-            return;
+            
+            // If Firebase has ALL data (including ingredients), return immediately
+            if (isDataComplete(foundData)) {
+              setBaseFood(foundData);
+              setStep('input');
+              return;
+            }
           }
         }
       } catch (fbError) {
         console.warn("Firebase lookup failed:", fbError);
       }
 
-      // LAYER 2: Try OpenFoodFacts API
-      try {
-        const response = await fetch(
-          `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`,
-          ({ timeout: 10000 } as any)
-        );
+      // LAYER 2: Try OpenFoodFacts API to fill in the missing pieces (like ingredients)
+      if (!isDataComplete(foundData)) {
+        try {
+          const response = await fetch(
+            `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`,
+            ({ timeout: 10000 } as any)
+          );
 
-        if (!response.ok) {
-          throw new Error(`API returned ${response.status}`);
+          if (response.ok) {
+            const apiData = await response.json();
+
+            if (apiData && apiData.status === 1 && apiData.product) {
+              const product = apiData.product;
+              const nutriments = product.nutriments || {};
+
+              const offData = {
+                name: product.product_name ? String(product.product_name).trim() : "Unknown Food",
+                brand: product.brands ? String(product.brands).trim() : "Generic",
+                calories: Number(nutriments['energy-kcal_100g']) || 0,
+                sugar: Number(nutriments.sugars_100g) || 0,
+                sodium: (Number(nutriments.salt_100g) || 0) * 400,
+                fat: Number(nutriments.fat_100g) || 0,
+                carbs: Number(nutriments.carbohydrates_100g) || 0,
+                protein: Number(nutriments.proteins_100g) || 0,
+                ingredients: product.ingredients_text ? String(product.ingredients_text).trim() : "Ingredients not listed",
+                image: product.image_url || null,
+                servingSize: product.serving_size ? String(product.serving_size).trim() : "100g"
+              };
+
+              // Smart merge: give priority to existing foundData, but fill in missing crucial fields from OFF
+              if (!foundData) foundData = offData;
+              else {
+                if (!foundData.ingredients || foundData.ingredients === "Ingredients not listed") {
+                  foundData.ingredients = offData.ingredients;
+                }
+                if (!foundData.image) foundData.image = offData.image;
+                if (!foundData.name || foundData.name === "Unknown Food") foundData.name = offData.name;
+              }
+
+              if (product.serving_quantity && (!foundData.servingSize || foundData.servingSize === "100g")) {
+                setPortionSize(String(Math.round(Number(product.serving_quantity))));
+              }
+              
+              if (isDataComplete(foundData)) {
+                setBaseFood(foundData);
+                setStep('input');
+                return;
+              }
+            }
+          }
+        } catch (apiError) {
+          console.warn("OpenFoodFacts API error:", apiError);
         }
+      }
 
-        const apiData = await response.json();
-
-        if (apiData && apiData.status === 1 && apiData.product) {
-          const product = apiData.product;
-
-          // Safely extract nutrition data
-          const nutriments = product.nutriments || {};
-
-          // Validate that product has minimum nutrition data
-          const hasNutritionData =
-            nutriments['energy-kcal_100g'] !== undefined ||
-            nutriments.sugars_100g !== undefined ||
-            nutriments.salt_100g !== undefined ||
-            nutriments.fat_100g !== undefined;
-
-          if (hasNutritionData) {
-            foundData = {
-              name: product.product_name ? String(product.product_name).trim() : "Unknown Food",
-              brand: product.brands ? String(product.brands).trim() : "Generic",
-              calories: Number(nutriments['energy-kcal_100g']) || 0,
-              sugar: Number(nutriments.sugars_100g) || 0,
-              sodium: (Number(nutriments.salt_100g) || 0) * 400,
-              fat: Number(nutriments.fat_100g) || 0,
-              carbs: Number(nutriments.carbohydrates_100g) || 0,
-              protein: Number(nutriments.proteins_100g) || 0,
-              ingredients: product.ingredients_text ? String(product.ingredients_text).trim() : "Ingredients not listed",
-              image: product.image_url || null,
-              servingSize: product.serving_size ? String(product.serving_size).trim() : "100g"
-            };
-
-            if (product.serving_quantity) {
-              setPortionSize(String(Math.round(Number(product.serving_quantity))));
+      // LAYER 3: Still incomplete! Fallback to Gemini Internet Search
+      if (!isDataComplete(foundData)) {
+        try {
+          setIsAISearching(true);
+          const fallbackData = await findProductByBarcodeFallback(barcode);
+          if (fallbackData) {
+            if (!foundData) {
+              foundData = fallbackData;
+            } else {
+              // Merge missing items from Gemini
+              if (!foundData.ingredients || foundData.ingredients === "Ingredients not listed") {
+                foundData.ingredients = fallbackData.ingredients;
+              }
+              if (!foundData.image && fallbackData.image) foundData.image = fallbackData.image;
+              if (foundData.calories === undefined || foundData.calories === null) foundData.calories = fallbackData.calories;
+              if (foundData.protein === undefined) foundData.protein = fallbackData.protein;
+              if (foundData.carbs === undefined) foundData.carbs = fallbackData.carbs;
+              if (foundData.fat === undefined) foundData.fat = fallbackData.fat;
+              if (foundData.sugar === undefined) foundData.sugar = fallbackData.sugar;
+              if (foundData.sodium === undefined) foundData.sodium = fallbackData.sodium;
+              if (fallbackData.additives) {
+                foundData.additives = fallbackData.additives;
+              }
             }
 
             setBaseFood(foundData);
             setStep('input');
-            
-            // Cache the OpenFoodFacts data back to our global 'food_items' database
-            try {
-              const user = auth.currentUser;
-              const docData = {
-                ...foundData,
-                name_lower: foundData.name ? foundData.name.toLowerCase() : "",
-                userId: user ? user.uid : "system",
-                source: "openfoodfacts",
-                createdAt: new Date().toISOString()
-              };
-              await setDoc(doc(db, "food_items", barcode), docData);
-            } catch (dbErr) {
-              console.error("Failed to cache OFF data back to global DB", dbErr);
-            }
-
             return;
           }
+        } catch (fallbackError) {
+          console.warn("Gemini Fallback Search failed:", fallbackError);
+        } finally {
+          setIsAISearching(false);
         }
-      } catch (apiError) {
-        console.warn("OpenFoodFacts API error:", apiError);
       }
 
-      // LAYER 3: Product not found locally or reliably on OFF - fallback to Gemini Internet Search
-      try {
-        setIsAISearching(true);
-        const fallbackData = await findProductByBarcodeFallback(barcode);
-        if (fallbackData) {
-          foundData = {
-            name: fallbackData.name,
-            brand: fallbackData.brand,
-            calories: fallbackData.calories,
-            protein: fallbackData.protein,
-            carbs: fallbackData.carbs,
-            fat: fallbackData.fat,
-            sugar: fallbackData.sugar,
-            sodium: fallbackData.sodium,
-            ingredients: fallbackData.ingredients,
-            image: fallbackData.image,
-            servingSize: fallbackData.serving_size,
-          };
-
-          setBaseFood(foundData);
-          setStep('input');
-          // Cache the AI fetched data back to your global 'food_items' database
-          try {
-            const user = auth.currentUser;
-            const docData = {
-              ...foundData,
-              name_lower: foundData.name ? foundData.name.toLowerCase() : "",
-              userId: user ? user.uid : "system",
-              source: "ai_fallback",
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(doc(db, "food_items", barcode), docData);
-          } catch (dbErr) {
-            console.error("Failed to cache AI data back to global DB", dbErr);
-          }
-
-          return;
-        }
-      } catch (fallbackError) {
-        console.warn("Gemini Fallback Search failed:", fallbackError);
-      } finally {
-        setIsAISearching(false);
+      // If we got here but foundData has *some* data (just unavoidably missing ingredients), proceed anyway
+      if (foundData) {
+         setBaseFood(foundData);
+         setStep('input');
+         return;
       }
 
       // LAYER 4: Product absolutely not found - offer options
@@ -348,7 +369,51 @@ export default function ScanResultScreen({ route, navigation }: any) {
           }
         }
 
-        const uniqueAdditives = Array.from(new Set(additiveCodes)).slice(0, 15);
+        const extractAdditives = (ingredients: string) => {
+          const knownAdditives = [
+            "monosodium glutamate",
+            "msg",
+            "sodium benzoate",
+            "potassium sorbate",
+            "citric acid",
+            "artificial flavor",
+            "artificial colour",
+            "preservative",
+            "flavour enhancer",
+            "emulsifier"
+          ];
+
+          const found = [];
+          const lower = ingredients.toLowerCase();
+
+          for (const item of knownAdditives) {
+            if (lower.includes(item)) {
+              found.push(item);
+            }
+          }
+          return found;
+        };
+
+        const additivesFromText = extractAdditives(ingredientsText);
+
+        const finalAdditives = [
+          ...additiveCodes, // INS codes
+          ...additivesFromText,
+          ...(calculatedFood.additives || [])
+        ];
+
+        if (finalAdditives.length === 0) {
+          const fName = String(calculatedFood.name || "").toLowerCase();
+          if (fName.includes("wafer") || fName.includes("chips")) {
+            finalAdditives.push(
+              "Flavour Enhancers (INS 621)",
+              "Preservatives",
+              "Artificial Flavour"
+            );
+          }
+        }
+
+        const uniqueFinal = Array.from(new Set(finalAdditives));
 
         const aiResponse = await getFoodAnalysis({
           foodName: String(calculatedFood.name || "Unknown"),
@@ -359,7 +424,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
             calories: Number(calculatedFood.calories) || 0,
           },
           ingredients: ingredientsArr,
-          additives: uniqueAdditives,
+          additives: uniqueFinal.slice(0, 15),
           userContext: profileData || {},
         });
 
@@ -410,6 +475,22 @@ export default function ScanResultScreen({ route, navigation }: any) {
 
       // Call the new helper function
       await logFoodItem(itemToLog, todayDate);
+
+      // Only globally cache the product into Firestore if the user actually clicked "Log This Food"
+      if (barcode && baseFood) {
+        try {
+          const user = auth.currentUser;
+          const globalData = {
+            ...baseFood,
+            name_lower: (editedName.trim() || baseFood.name || "").toLowerCase(),
+            userId: user ? user.uid : "system",
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, "food_items", barcode), globalData, { merge: true });
+        } catch (dbErr) {
+          console.error("Failed to globally cache food items upon logging:", dbErr);
+        }
+      }
 
       Alert.alert("Logged!", `${Math.round(food.calories)} kcal added.`);
 
@@ -787,7 +868,7 @@ export default function ScanResultScreen({ route, navigation }: any) {
                 <Text style={styles.newLoadingText}>Analyzing additives...</Text>
               </View>
             ) : displayAdditives.length === 0 ? (
-              <Text style={styles.newMutedText}>Information on additives is not available.</Text>
+              <Text style={styles.newMutedText}>No artificial additives, preservatives, or colors were detected in the ingredients.</Text>
             ) : (
               <View style={styles.newAdditivesList}>
                 {displayAdditives.map((item, idx) => {

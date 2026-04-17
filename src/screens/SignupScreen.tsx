@@ -47,9 +47,8 @@ export default function SignupScreen({ navigation }: any) {
       
       // 3. The AppNavigator will detect the new user.
       // Since "user_profiles" doc does NOT exist yet, 
-      // the Navigator should correctly send them to Onboarding.
+      // the Navigator should correctly send them to Onboarding automatically.
       Alert.alert("Success", "Account created successfully!");
-      navigation.navigate('Login');
     } catch (error) {
       Alert.alert("Error", "Signup failed");
     } finally {

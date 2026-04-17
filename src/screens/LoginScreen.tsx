@@ -24,12 +24,8 @@ export default function LoginScreen({ navigation }: any) {
 
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      if (user) {
-        navigation.navigate('Home');
-      }
+      await signInWithEmailAndPassword(auth, email, password);
+      // Navigation is handled automatically by onAuthStateChanged in AppNavigator
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
     } finally {

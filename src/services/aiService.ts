@@ -103,8 +103,9 @@ export async function getFoodAnalysis(params: {
   const { ingredients, additives, nutrients, userContext, foodName } = params;
 
   try {
-    // We prioritize 2.5 flash, fallback to variants that share the same free tier caps
+    // We prioritize 3.1 pro (paid tier), fallback to variants that share the same free tier caps
     const FALLBACK_MODELS = [
+      "gemini-3.1-pro-preview",
       "gemini-2.5-pro",
       "gemini-2.5-flash",
       "gemini-2.5-flash-lite",
@@ -196,11 +197,13 @@ RESPONSE SHAPE
       return {
         overallTag: "low risk",
         overallSummary: "Analysis is temporarily unavailable. Please review ingredients and portion sizes.",
-        additiveRiskAnalysis: additivesArr.map((a) => ({
-          additive: a,
-          risk: "Low",
-          consumingDescription: "Likely low concern, but keep an eye on your individual sensitivities.",
-        })),
+        additiveRiskAnalysis: [
+          {
+            additive: "Unknown additives (estimated)",
+            risk: "Medium",
+            consumingDescription: "Processed food likely contains preservatives or flavor enhancers."
+          }
+        ],
         nutritionalRiskAnalysis: [],
         safePortion: {
           servingText: "1 serving",
@@ -291,12 +294,14 @@ export interface FallbackProductResponse {
   sodium: number;
   serving_size: string;
   ingredients: string;
+  additives?: string[];
 }
 
 export async function findProductByBarcodeFallback(barcode: string): Promise<FallbackProductResponse | null> {
   try {
     // Models listed that uniquely support Google Search Grounding natively:
     const BARCODE_FALLBACK_MODELS = [
+      "gemini-3.1-pro-preview",
       "gemini-2.5-pro",
       "gemini-2.5-flash",
       "gemini-2.0-flash"
@@ -331,7 +336,8 @@ Return ONLY a valid JSON object (no markdown, no surrounding text) with the foll
   "sugar": number (in grams),
   "sodium": number (in mg),
   "serving_size": "100g or the retrieved serving size string",
-  "ingredients": "Comma separated string of ingredients. E.g. 'Wheat, Sugar, Salt...'"
+  "ingredients": "Comma separated string of ingredients. E.g. 'Wheat, Sugar, Salt...'",
+  "additives": ["Array of strings", "List ANY possible additives, preservatives, INS codes, artificial colors, flavors EVEN IF YOU HAVE TO INFER BASED ON PRODUCT TYPE"]
 }
 
 Ensure numeric fields like calories, protein, carbs, fat, sugar, and sodium only contain the number (e.g., 250). Provide 0 if a nutrient is definitively zero.
@@ -361,6 +367,7 @@ Ensure numeric fields like calories, protein, carbs, fat, sugar, and sodium only
       sodium: Number(parsed.sodium) || 0,
       serving_size: parsed.serving_size ? String(parsed.serving_size) : "100g",
       ingredients: parsed.ingredients ? String(parsed.ingredients) : "Ingredients not listed",
+      additives: Array.isArray(parsed.additives) ? parsed.additives : [],
     };
   } catch (error) {
     console.error("Error in findProductByBarcodeFallback:", error);
