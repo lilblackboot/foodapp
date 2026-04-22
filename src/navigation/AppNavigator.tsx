@@ -100,7 +100,20 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="Scan" component={ScanStackNavigator} options={{ tabBarLabel: () => null }} /> 
+      <Tab.Screen 
+        name="Scan" 
+        component={ScanStackNavigator} 
+        options={{ 
+          tabBarLabel: () => null,
+          unmountOnBlur: true
+        }} 
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('Scan', { screen: 'ScanCamera' });
+          },
+        })}
+      /> 
       <Tab.Screen name="History" component={HistoryScreen} options={{ title: 'Logs' }} />
     </Tab.Navigator>
   );
